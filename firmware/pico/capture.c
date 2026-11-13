@@ -140,25 +140,27 @@ static uint8_t sequenceClockPin;
 #ifdef SUPPORTS_COMPLEX_TRIGGER
 
 #define COMPLEX_TRIGGER_wrap_target 0
-#define COMPLEX_TRIGGER_wrap 8
+#define COMPLEX_TRIGGER_wrap 9
 
+//Instruction 0 waits until the capture program recorded the pre-trigger samples (IRQ 6)
 uint16_t COMPLEX_TRIGGER_program_instructions[] = {
             //     .wrap_target
-    0x80a0, //  0: pull   block                      
-    0x6020, //  1: out    x, 32                      
-    0xe000, //  2: set    pins, 0                    
-    0xc007, //  3: irq    nowait 7                   
-    0xa0e0, //  4: mov    osr, pins                  
-    0x6044, //  5: out    y, 4                       
-    0x00a4, //  6: jmp    x != y, 4                  
-    0xe001, //  7: set    pins, 1                    
-    0x0008, //  8: jmp    8                          
+    0x20c6, //  0: wait   1 irq, 6
+    0x80a0, //  1: pull   block                      
+    0x6020, //  2: out    x, 32                      
+    0xe000, //  3: set    pins, 0                    
+    0xc007, //  4: irq    nowait 7                   
+    0xa0e0, //  5: mov    osr, pins                  
+    0x6044, //  6: out    y, 4                       
+    0x00a5, //  7: jmp    x != y, 5                  
+    0xe001, //  8: set    pins, 1                    
+    0x0009, //  9: jmp    9                          
             //     .wrap
 };
 
 struct pio_program COMPLEX_TRIGGER_program = {
     .instructions = COMPLEX_TRIGGER_program_instructions,
-    .length = 9,
+    .length = 10,
     .origin = -1,
 };
 
@@ -180,26 +182,28 @@ static inline pio_sm_config COMPLEX_TRIGGER_program_get_default_config(uint offs
 //Edge trigger with trigger output (trigger type 5). It works like the complex trigger: this state machine
 //watches the trigger channel and sets COMPLEX_TRIGGER_OUT_PIN, which starts the capture through
 //COMPLEX_TRIGGER_IN_PIN and also triggers the devices chained to the trigger output (multi device sets).
-//Instructions 2-4 wait for the opposite level first, so only an edge triggers; they are patched for falling edges.
+//Instruction 0 waits until the capture program recorded the pre-trigger samples (IRQ 6); instructions 3-5 wait for
+//the opposite level first, so only an edge triggers; they are patched for falling edges.
 
 #define EDGE_TRIGGER_wrap_target 0
-#define EDGE_TRIGGER_wrap 6
+#define EDGE_TRIGGER_wrap 7
 
 uint16_t EDGE_TRIGGER_program_instructions[] = {
             //     .wrap_target
-    0xe000, //  0: set    pins, 0
-    0xc007, //  1: irq    nowait 7
-    0x00c2, //  2: jmp    pin, 2         (rising edge: wait while high)
-    0x00c5, //  3: jmp    pin, 5         (rising edge: high after low)
-    0x0003, //  4: jmp    3
-    0xe001, //  5: set    pins, 1
-    0x0006, //  6: jmp    6
+    0x20c6, //  0: wait   1 irq, 6       (the capture program recorded the pre-trigger samples)
+    0xe000, //  1: set    pins, 0
+    0xc007, //  2: irq    nowait 7
+    0x00c3, //  3: jmp    pin, 3         (rising edge: wait while high)
+    0x00c6, //  4: jmp    pin, 6         (rising edge: high after low)
+    0x0004, //  5: jmp    4
+    0xe001, //  6: set    pins, 1
+    0x0007, //  7: jmp    7
             //     .wrap
 };
 
 struct pio_program EDGE_TRIGGER_program = {
     .instructions = EDGE_TRIGGER_program_instructions,
-    .length = 7,
+    .length = 8,
     .origin = -1,
 };
 
@@ -214,15 +218,15 @@ static void configure_edge_trigger_program(bool fallingEdge)
 {
     if(fallingEdge)
     {
-        EDGE_TRIGGER_program_instructions[2] = 0x00c4; //jmp pin, 4 (high: wait for the falling edge)
-        EDGE_TRIGGER_program_instructions[3] = 0x0002; //jmp 2      (low: wait until high first)
-        EDGE_TRIGGER_program_instructions[4] = 0x00c4; //jmp pin, 4 (wait while high)
+        EDGE_TRIGGER_program_instructions[3] = 0x00c5; //jmp pin, 5 (high: wait for the falling edge)
+        EDGE_TRIGGER_program_instructions[4] = 0x0003; //jmp 3      (low: wait until high first)
+        EDGE_TRIGGER_program_instructions[5] = 0x00c5; //jmp pin, 5 (wait while high)
     }
     else
     {
-        EDGE_TRIGGER_program_instructions[2] = 0x00c2; //jmp pin, 2 (wait while high)
-        EDGE_TRIGGER_program_instructions[3] = 0x00c5; //jmp pin, 5 (high after low: trigger)
-        EDGE_TRIGGER_program_instructions[4] = 0x0003; //jmp 3
+        EDGE_TRIGGER_program_instructions[3] = 0x00c3; //jmp pin, 3 (wait while high)
+        EDGE_TRIGGER_program_instructions[4] = 0x00c6; //jmp pin, 6 (high after low: trigger)
+        EDGE_TRIGGER_program_instructions[5] = 0x0004; //jmp 4
     }
 }
 
@@ -1157,10 +1161,15 @@ static bool start_trigger_program_capture(uint32_t freq, uint32_t preLength, uin
     //Configure DMA's
     configureCaptureDMAs(captureMode);
 
+    //No pre-trigger recording of an earlier capture lets the trigger program start
+    pio_interrupt_clear(capturePIO, 6);
+
     //Enable capture state machine
     pio_sm_set_enabled(capturePIO, sm_Capture, true);
 
-    //Write capture length to post program
+    //Write the pre-trigger length (recorded before the trigger program starts, IRQ 6) and the capture length to
+    //the capture program
+    pio_sm_put_blocking(capturePIO, sm_Capture, preLength > 0 ? preLength - 1 : 0);
     pio_sm_put_blocking(capturePIO, sm_Capture, postLength - 1);
 
     //Enable trigger state machine
@@ -2297,7 +2306,10 @@ bool StartCaptureSimple(uint32_t freq, uint32_t preLength, uint32_t postLength, 
     //Enable state machine
     pio_sm_set_enabled(capturePIO, sm_Capture, true);
 
-    //Write loop count and capture length to post program to start the capture process
+    //Write the pre-trigger length (recorded before the trigger counts; not the burst measuring programs), loop count
+    //and capture length to the program to start the capture process
+    if(!measure)
+        pio_sm_put_blocking(capturePIO, sm_Capture, preLength > 0 ? preLength - 1 : 0);
     pio_sm_put_blocking(capturePIO, sm_Capture, loopCount);
     pio_sm_put_blocking(capturePIO, sm_Capture, postLength - 1);
     
