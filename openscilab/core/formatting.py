@@ -43,6 +43,48 @@ def to_large_frequency(frequency: float) -> str:
     return f"{round(frequency, 2):g} Hz"
 
 
+def to_exact_frequency(frequency: int) -> str:
+    """A whole number of hertz with the largest unit that keeps every digit: ``33.333333 MHz``."""
+    for scale, unit, decimals in ((1e9, "GHz", 9), (1e6, "MHz", 6), (1e3, "kHz", 3)):
+        if abs(frequency) >= scale:
+            return f"{frequency / scale:.{decimals}f}".rstrip("0").rstrip(".") + f" {unit}"
+    return f"{int(frequency)} Hz"
+
+
+_FREQUENCY_PREFIXES = {"": 1.0, "k": 1e3, "m": 1e6, "g": 1e9}
+
+
+def _plain_number(text: str, whole: bool) -> str:
+    """``text`` with ``.`` as its decimal point and without group separators: of both, the last one
+    is the decimal point; one kind more than once separates groups, once a decimal point (in whole
+    numbers, ``whole``, a group separator when three digits follow: ``1.000``)."""
+    separators = [index for index, char in enumerate(text) if char in ".,"]
+    if not separators:
+        return text
+    last = separators[-1]
+    kinds = {text[index] for index in separators}
+    if len(kinds) == 1 and (len(separators) > 1 or (whole and len(text) - last - 1 == 3)):
+        return text.replace(".", "").replace(",", "")
+    return text[:last].replace(".", "").replace(",", "") + "." + text[last + 1:]
+
+
+def parse_frequency(text: str) -> float:
+    """Hertz of a frequency such as ``1.5 MHz``, ``500k``, ``2,5 MHz``, ``48000`` or ``1.000.000 Hz``
+    (``m`` is mega: a rate of millihertz is no rate)."""
+    value = text.strip().lower().replace(" ", "").replace("\u00a0", "")
+    if value.endswith("hz"):
+        value = value[:-2]
+    prefix = value[-1:] if value[-1:] in ("k", "m", "g") else ""
+    number = _plain_number(value[: len(value) - len(prefix)], whole=not prefix)
+    try:
+        frequency = float(number) * _FREQUENCY_PREFIXES[prefix]
+    except ValueError:
+        raise ValueError(f"'{text}' is no frequency such as 1.5 MHz, 500 kHz or 48000") from None
+    if frequency < 0 or frequency != frequency or frequency == float("inf"):
+        raise ValueError("A frequency is a positive number")
+    return frequency
+
+
 def to_inferred_frequency(duration: float) -> str:
     """Frequency of a square wave whose half period lasts ``duration`` seconds."""
     if not duration or duration <= 0:

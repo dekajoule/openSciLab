@@ -120,7 +120,13 @@ A new section of the window, *Circuits* (Ctrl+Shift+C), and the document *Circui
   Arduino blinking an LED as fast as its potentiometer says, held on by a switch, watched by an
   oscilloscope, and a hybrid AC/DC lab power supply drawn with wires only, in framed blocks: DC, AC
   or both up to 230 V set with the potentiometers `RV_DC` and `RV_AC`, switching regulators for the
-  rails 10 V beyond the peak, a linear power amplifier for an exact, clean output at `OUT`/`COM`). Probes show their name with
+  rails 10 V beyond the peak, a linear power amplifier for an exact, clean output at `OUT`/`COM`, and a
+  W65C02 breadboard computer that runs: its CPU executes the program in its EEPROM - "Hello, world!" on the
+  LCD, LEDs counting - and a logic analyzer traces and disassembles its bus; drawn with wires only, the
+  buses as trunks above and below the chips; its clock module (555, the
+  new Schmitt-trigger inverter, crystal oscillator, single step) and its address decoder are circuits of
+  their own). The 555's latch holds a full level: a long time step no longer leaves its output stuck half
+  way. Probes show their name with
   the value (`C 105 mV`). In virtual time a capture of a circuit keeps to the flow's time (a timer's
   second passed at once, the capture took the circuit's first moments). A part whose pins are all on one net is said
   to be shorted (the transistor switch had its LED shorted that way and its potentiometer upside down).
@@ -193,8 +199,95 @@ theme). Checked by `tests/test_terminology.py`, `tests/test_theme_tokens.py` and
 
 ### Application
 
+- **A light theme by default**: openSciLab starts in the light theme (*Settings → Appearance*: dark or
+  like the system); the waveform display stays dark like the screen of an instrument.
+- **A look after Safari**: both themes take the system blue and the soft greys of macOS; buttons,
+  fields and tabs are rounded, cards, banners and menus more so (one scale of roundness, `RADIUS` in
+  `ui/theme.py`). Tabs are rounded and the selected one stands out of its bar instead of an underline,
+  the search of the header is a grey field like Safari's address field, *Real time | Virtual time* a
+  switch whose chosen half is raised out of a grey track, menus highlight in the accent colour with
+  rounded corners, cards and tiles are white on the grey window, scroll bars are thin and without track.
+- **No icons in menus**: the menu bar, context menus and the menus of buttons are text only; tool bars
+  and buttons keep their icons.
+- **New as a bar of buttons**: the header has a button for every kind of *New* (flow, panel, data view,
+  waveform, the kinds of plugins, project from an example) instead of one button with a menu.
+- **The data view of a device opens with its capture setup**: *Data view* of a device card (and of the
+  device list) shows the capture setup at once while nothing has been captured; the empty data view of
+  a device offers *Capture setup…* instead of *Open the device*.
+- **A double click on a tab opens the document in a window of its own** (as dragging the tab off its
+  bar does); a single click only shows it.
+- **Channels sorted by drag and drop in the data view**: a channel is dragged by its name (it was only
+  by the free room of its row, the name kept the mouse), a line shows where it goes; analog tracks are
+  dragged by their names too. The order is undone like other edits and saved with the capture.
+- **Signals for the simulators that speak a real protocol**: the simulated Arduinos with the firmware
+  protocol (`arduino-sim:`) and the simulated DHO924S with and without the bridge app or on USB
+  (`rigol-sim:`) have the *Signals* and *Events* tabs of their device model, as the `sim:` simulators;
+  what they were told is kept per address.
+- **Simulated signals a device can capture**: the count rate, the step rate of SPI and I²C and the baud
+  rate of a scenario start at what the device captures (a tenth of its highest rate at most): an
+  Arduino Uno or Mega counts at 10 kHz and sends at 9600 Bd instead of 1 MHz and 115200 Bd, which it
+  could not capture (the lowest bits of the counter stood still, an edge trigger on them never fired).
+- **No *Stream to disk* on the device card**: streaming is started in the data view (its tool bar, the
+  capture setup).
+- **The capture setup on one page**: sampling, trigger and channels one below the other in one
+  scrolled page instead of three pages to switch between (the channel table, the longest part, last);
+  a problem scrolls to where it is fixed. Above it a time line draws the capture around the
+  trigger: the samples before it and after it in proportion, with their counts and durations (states
+  with an external clock), every burst, the start of a capture without a trigger and a stream until
+  stopped. The capture is set on it, too: the trigger is dragged (or clicked) to its place in the
+  capture, the end dragged or the wheel turned for the length in round numbers (the arrow keys do
+  both).
+- **Only sample counts the device captures**: the samples after the trigger (of every burst) can only
+  be set as far as they fit next to those before it, instead of a capture that is too long and an
+  error on *Capture*; raising the samples before the trigger shortens those after it.
+- **A 6502 computer in Circuits**: the family *Computer* - W65C02S, W65C22S, 62256 SRAM, 28C256 EEPROM
+  (its *Image*: a `.bin` or Intel `.hex` file) and an HD44780 display - its text in the window of its symbol
+  while the circuit runs (a component's `display` in the library) - emulated with the circuit bus cycle
+  by bus cycle (the CPU passes Klaus Dormann's 6502 and 65C02 test suites), drawn in the order of their
+  pins - and a crystal oscillator. The nets only chips connect are carried by the co-simulation as levels
+  (no solver steps per edge), the others get output stages; the setting *Logic edge* sets the rise time
+  of logic gates. Logic probes on the bus are the `circuit:` device's channels for the data view and the
+  C64 bus decoder; the signals scenario *Circuit* puts a running circuit on the pins of a simulated
+  logic analyzer - an Arduino Mega wired as Ben Eater's monitor, with the profile *W65C02 breadboard
+  computer - Arduino Mega 2560*.
+- **The C64 bus decoder for the W65C02S, with SYNC**: the option *CPU* chooses the 6510 of the C64
+  or the CMOS W65C02S (Ben Eater's 6502 computer, for one): its opcodes (BRA, PHX/PHY/PLX/PLY, STZ,
+  TSB/TRB, `(zp)`, `JMP (abs,X)`, RMB/SMB/BBR/BBS, WAI/STP, the reserved NOPs) and its cycles
+  (`ASL abs,X` in 6, `JMP (abs)` in 6). *Memory map* names the regions of the C64, of Ben Eater's
+  computer (RAM, ACIA, VIA, ROM), of his computer without the ACIA ($4000-$5FFF free; the LCD on
+  port B and PA5-PA7, LEDs on PA0-PA3) or of any 6502; the 16 registers of the VIA by their names
+  (ORB, ORA, DDRB, ..., also on their mirrors). The optional input *SYNC* (pin 7 of a 6502 or
+  W65C02S; the 6510 has none) marks the opcode fetches: nothing is predicted, the disassembly starts
+  at the first fetch and never loses the program.
+- **Decoders on a state analysis**: *Analyze > State analysis* keeps the clock on its states, so the
+  C64 decoder gets its Φ2 drawn in as with a state capture of a device, instead of failing
+  (*'Decoder' object has no attribute 'samplenum'*, which hid the missing clock); *Capture again*
+  still captures the timing the states were made of.
+- **Decoders of a profile on another capture find their channels by name**: an input assigned to a
+  channel the capture does not have, or to one of another name while the capture has a channel of
+  its own name, goes to that channel. The C64 decoder of the Mega profile now reads the C64 example
+  of a LogicAnalyzer (A0 had been on its *Φ2 (E)*). Inputs on unnamed channels stay where they are.
+- **The rate with its unit and on a slider**: the rate is shown as *2.5 MHz* and typed as *1.5 MHz*,
+  *500k*, *2,5 MHz* or *48000*; its arrows step through 1, 2, 5 × 10ⁿ. A slider next to it sets it
+  on a logarithmic scale in round numbers between the least and the most rate the device has with
+  these channels and this mode (a device with a list of rates: through the list).
+- **Channels named where one is chosen**: the trigger, the external clock and the stages of a
+  sequence list a channel with the device's pin and its name, *Channel 31 · D2 · Φ2 (E)* (they
+  follow a name typed in the channel table); the trigger of the capture bar names its channel
+  (*Edge ↑ CH9 · /RESET (C)*). The clock's name is that of its channel when it is captured.
+- **Decoders on the clock of a state capture**: every state is an edge of the clock, so the clock is
+  no channel of the capture, and decoders that wait for its edges (the C64 bus decoder on Φ2) found
+  none. The decoder channels offer the clock now (*31: Φ2 (E)*, assigned by its name); a decoder on it
+  decodes the states with the clock drawn in (three samples per state, the bus stable around the read
+  point) and its annotations land on the states. The capture setup keeps a clock edge it saves
+  (*External clock* failed on *Capture* with `'str' object has no attribute 'value'`).
+- **The C64 bus decoder on a slow 6502 in a timing capture**: at 10 MHz and below a sample is longer
+  than the 6502 holds the bus after the falling Φ2 edge, so the next address already shows at the
+  edge sample; that is no longer flagged as *Bus changing at the read point* (every cycle of an
+  Arduino capture at 1 kHz was). Without instructions in fewer than 32 cycles the Disassembly row
+  says the capture is too short instead of asking to align boards.
 - **The clock of a state capture has a name**: the clock is no channel of the capture, so its name went
-  nowhere - the profile *C64 expansion port - Arduino Mega 2560 (Ben Eater's wiring)* showed no Φ2.
+  nowhere - the profile *C64 expansion port - Arduino Mega 2560 (after Ben Eater's 6502 monitor)* showed no Φ2.
   Settings and profiles keep it (`ClockName`, written only when set); the clock choice of the capture
   setup (*Channel 31 · Φ2 (E)*), the channel table and the pins of the device card (D2: *Φ2 (E)*,
   captured: *clock*) and the line of the next capture (*clock: Φ2 (E) ↓*) show it. The device card has
@@ -288,10 +381,11 @@ theme). Checked by `tests/test_terminology.py`, `tests/test_theme_tokens.py` and
   are *C64 expansion port - LogicAnalyzer V2: ...* (file `c64-logicanalyzer-v2.json`, was
   `c64-expansion-port.json`, whose copy in the profiles folder is removed unless it was
   changed), and the Arduino Mega 2560 has a profile of its own, *C64 expansion port - Arduino Mega
-  2560 (Ben Eater's wiring)* (`c64-arduino-mega.json`): the pins of Ben Eater's 6502 monitor
-  (address bus on the even pins 22-52, data bus on the odd pins 39-53, Φ2 on D2, R/W on D3), the
-  other lines of the port on free pins of the same ports, a state capture per falling Φ2 edge with
-  the buses *Address* and *Data*. Made for a slowed or single-stepped 6502: the Mega sends about
+  2560 (after Ben Eater's 6502 monitor)* (`c64-arduino-mega.json`): the address bus on the even
+  pins 22-52 (A0 on 22), the data bus on the odd pins 31-45 (D0 on 31), Φ2 on D2 (the clock, and
+  captured as a channel, so a timing capture keeps it), R/W on D3, /RESET on D53 (the other lines of
+  the port are left out), a state capture per falling Φ2 edge with
+  the buses *Address* and *Data* and the C64 bus decoder, which disassembles the states. Made for a slowed or single-stepped 6502: the Mega sends about
   1,000 states a second, a C64 at full speed (1 MHz) is far too fast for it.
 
 ### Firmware

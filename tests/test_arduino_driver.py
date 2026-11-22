@@ -85,6 +85,27 @@ def test_discovery_opens_the_shell():
         discovery.open_device("arduino-sim:no-such-board")
 
 
+def test_the_simulator_behind_the_protocol_says_what_it_simulates():
+    """A simulated Arduino that speaks the firmware protocol has the simulation of its device model
+    (Signals and Events of the device card), and simulates what it was told last time."""
+    from openscilab.driver.simulated.stored import remember_signals
+
+    remember_signals("arduino-sim:uno", {"scenario": "idle", "channels": {"D5": {"type": "constant", "level": 1}}})
+    driver = open_shell("uno")
+    instrument = Instrument.from_driver(driver, uri=driver.address)
+    try:
+        simulation = instrument.simulation
+        assert simulation is not None and instrument.capture.driver is not None
+        assert simulation.signals()["scenario"] == "idle"
+        time.sleep(0.01)
+        assert instrument.gpio.read("D5") == 1  # (read through the firmware protocol)
+        simulation.apply_signals({"scenario": "idle", "channels": {"D5": {"type": "constant", "level": 0}}})
+        time.sleep(0.01)
+        assert instrument.gpio.read("D5") == 0
+    finally:
+        instrument.close()
+
+
 def test_arduino_ports_are_known_by_their_usb_ids(monkeypatch):
     class Port:
         def __init__(self, device, vid, pid, product=None):

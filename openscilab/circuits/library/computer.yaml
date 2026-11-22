@@ -1,0 +1,307 @@
+# openSciLab's own components: the chips of a 6502 breadboard computer (examples/library/14-circuits/07-w65c02-computer)
+# the processor, the interface adapter, the memories and the display are emulated with the circuit (circuits/mcu/bus_chips.py); the oscillator is a SPICE model
+- type: cpu.w65c02
+  title: W65C02S microprocessor
+  category: Computer
+  prefix: U
+  keywords: 6502 65c02 w65c02s cpu microprocessor wdc breadboard computer
+  description: 'The 8-bit CMOS 6502 of the Western Design Center (DIP-40, up to 14 MHz), drawn in the order of its pins on
+    the breadboard. Emulated with the circuit, bus cycle by bus cycle: its pins drive and read the nets.'
+  datasheet: https://www.westerndesigncenter.com/wdc/documentation/w65c02s.pdf
+  role: mcu
+  board: chip.w65c02
+  symbol:
+    shapes:
+    - {rect: [-80, -210, 80, 210], fill: background}
+    - {arc: [-8, -210, 0, -202, 8, -210]}
+    - {text: W65C02S, at: [0, -10], size: 10}
+    - {text: CPU, at: [0, 8], size: 7}
+    pins:
+    - {number: '1', name: VPB, at: [-100, -190], angle: 0, length: 20, kind: output}
+    - {number: '2', name: RDY, at: [-100, -170], angle: 0, length: 20, kind: bidirectional}
+    - {number: '3', name: PHI1O, at: [-100, -150], angle: 0, length: 20, kind: output}
+    - {number: '4', name: IRQB, at: [-100, -130], angle: 0, length: 20, kind: input}
+    - {number: '5', name: MLB, at: [-100, -110], angle: 0, length: 20, kind: output}
+    - {number: '6', name: NMIB, at: [-100, -90], angle: 0, length: 20, kind: input}
+    - {number: '7', name: SYNC, at: [-100, -70], angle: 0, length: 20, kind: output}
+    - {number: '8', name: VDD, at: [-100, -50], angle: 0, length: 20, kind: power_in}
+    - {number: '9', name: A0, at: [-100, -30], angle: 0, length: 20, kind: tri_state}
+    - {number: '10', name: A1, at: [-100, -10], angle: 0, length: 20, kind: tri_state}
+    - {number: '11', name: A2, at: [-100, 10], angle: 0, length: 20, kind: tri_state}
+    - {number: '12', name: A3, at: [-100, 30], angle: 0, length: 20, kind: tri_state}
+    - {number: '13', name: A4, at: [-100, 50], angle: 0, length: 20, kind: tri_state}
+    - {number: '14', name: A5, at: [-100, 70], angle: 0, length: 20, kind: tri_state}
+    - {number: '15', name: A6, at: [-100, 90], angle: 0, length: 20, kind: tri_state}
+    - {number: '16', name: A7, at: [-100, 110], angle: 0, length: 20, kind: tri_state}
+    - {number: '17', name: A8, at: [-100, 130], angle: 0, length: 20, kind: tri_state}
+    - {number: '18', name: A9, at: [-100, 150], angle: 0, length: 20, kind: tri_state}
+    - {number: '19', name: A10, at: [-100, 170], angle: 0, length: 20, kind: tri_state}
+    - {number: '20', name: A11, at: [-100, 190], angle: 0, length: 20, kind: tri_state}
+    - {number: '21', name: VSS, at: [100, 190], angle: 180, length: 20, kind: power_in}
+    - {number: '22', name: A12, at: [100, 170], angle: 180, length: 20, kind: tri_state}
+    - {number: '23', name: A13, at: [100, 150], angle: 180, length: 20, kind: tri_state}
+    - {number: '24', name: A14, at: [100, 130], angle: 180, length: 20, kind: tri_state}
+    - {number: '25', name: A15, at: [100, 110], angle: 180, length: 20, kind: tri_state}
+    - {number: '26', name: D7, at: [100, 90], angle: 180, length: 20, kind: bidirectional}
+    - {number: '27', name: D6, at: [100, 70], angle: 180, length: 20, kind: bidirectional}
+    - {number: '28', name: D5, at: [100, 50], angle: 180, length: 20, kind: bidirectional}
+    - {number: '29', name: D4, at: [100, 30], angle: 180, length: 20, kind: bidirectional}
+    - {number: '30', name: D3, at: [100, 10], angle: 180, length: 20, kind: bidirectional}
+    - {number: '31', name: D2, at: [100, -10], angle: 180, length: 20, kind: bidirectional}
+    - {number: '32', name: D1, at: [100, -30], angle: 180, length: 20, kind: bidirectional}
+    - {number: '33', name: D0, at: [100, -50], angle: 180, length: 20, kind: bidirectional}
+    - {number: '34', name: RWB, at: [100, -70], angle: 180, length: 20, kind: output}
+    - {number: '35', name: NC, at: [100, -90], angle: 180, length: 20, kind: no_connect}
+    - {number: '36', name: BE, at: [100, -110], angle: 180, length: 20, kind: input}
+    - {number: '37', name: PHI2, at: [100, -130], angle: 180, length: 20, kind: input}
+    - {number: '38', name: SOB, at: [100, -150], angle: 180, length: 20, kind: input}
+    - {number: '39', name: PHI2O, at: [100, -170], angle: 180, length: 20, kind: output}
+    - {number: '40', name: RESB, at: [100, -190], angle: 180, length: 20, kind: input}
+    reference: {at: [0, -220]}
+    value: false
+    pin_numbers: true
+  show: []
+  params: []
+
+- type: via.w65c22
+  title: W65C22S versatile interface adapter
+  category: Computer
+  prefix: U
+  keywords: 6522 65c22 w65c22s via interface adapter ports timer wdc
+  description: 'Two 8-bit ports, two timers and a shift register for a 6502 bus (DIP-40), drawn in the order of its pins on
+    the breadboard. Emulated with the circuit, bus cycle by bus cycle: its pins drive and read the nets.'
+  datasheet: https://www.westerndesigncenter.com/wdc/documentation/w65c22.pdf
+  role: mcu
+  board: chip.w65c22
+  symbol:
+    shapes:
+    - {rect: [-80, -210, 80, 210], fill: background}
+    - {arc: [-8, -210, 0, -202, 8, -210]}
+    - {text: W65C22S, at: [0, -10], size: 10}
+    - {text: VIA, at: [0, 8], size: 7}
+    pins:
+    - {number: '1', name: VSS, at: [-100, -190], angle: 0, length: 20, kind: power_in}
+    - {number: '2', name: PA0, at: [-100, -170], angle: 0, length: 20, kind: bidirectional}
+    - {number: '3', name: PA1, at: [-100, -150], angle: 0, length: 20, kind: bidirectional}
+    - {number: '4', name: PA2, at: [-100, -130], angle: 0, length: 20, kind: bidirectional}
+    - {number: '5', name: PA3, at: [-100, -110], angle: 0, length: 20, kind: bidirectional}
+    - {number: '6', name: PA4, at: [-100, -90], angle: 0, length: 20, kind: bidirectional}
+    - {number: '7', name: PA5, at: [-100, -70], angle: 0, length: 20, kind: bidirectional}
+    - {number: '8', name: PA6, at: [-100, -50], angle: 0, length: 20, kind: bidirectional}
+    - {number: '9', name: PA7, at: [-100, -30], angle: 0, length: 20, kind: bidirectional}
+    - {number: '10', name: PB0, at: [-100, -10], angle: 0, length: 20, kind: bidirectional}
+    - {number: '11', name: PB1, at: [-100, 10], angle: 0, length: 20, kind: bidirectional}
+    - {number: '12', name: PB2, at: [-100, 30], angle: 0, length: 20, kind: bidirectional}
+    - {number: '13', name: PB3, at: [-100, 50], angle: 0, length: 20, kind: bidirectional}
+    - {number: '14', name: PB4, at: [-100, 70], angle: 0, length: 20, kind: bidirectional}
+    - {number: '15', name: PB5, at: [-100, 90], angle: 0, length: 20, kind: bidirectional}
+    - {number: '16', name: PB6, at: [-100, 110], angle: 0, length: 20, kind: bidirectional}
+    - {number: '17', name: PB7, at: [-100, 130], angle: 0, length: 20, kind: bidirectional}
+    - {number: '18', name: CB1, at: [-100, 150], angle: 0, length: 20, kind: bidirectional}
+    - {number: '19', name: CB2, at: [-100, 170], angle: 0, length: 20, kind: bidirectional}
+    - {number: '20', name: VDD, at: [-100, 190], angle: 0, length: 20, kind: power_in}
+    - {number: '21', name: IRQB, at: [100, 190], angle: 180, length: 20, kind: open_collector}
+    - {number: '22', name: RWB, at: [100, 170], angle: 180, length: 20, kind: input}
+    - {number: '23', name: CS2B, at: [100, 150], angle: 180, length: 20, kind: input}
+    - {number: '24', name: CS1, at: [100, 130], angle: 180, length: 20, kind: input}
+    - {number: '25', name: PHI2, at: [100, 110], angle: 180, length: 20, kind: input}
+    - {number: '26', name: D7, at: [100, 90], angle: 180, length: 20, kind: bidirectional}
+    - {number: '27', name: D6, at: [100, 70], angle: 180, length: 20, kind: bidirectional}
+    - {number: '28', name: D5, at: [100, 50], angle: 180, length: 20, kind: bidirectional}
+    - {number: '29', name: D4, at: [100, 30], angle: 180, length: 20, kind: bidirectional}
+    - {number: '30', name: D3, at: [100, 10], angle: 180, length: 20, kind: bidirectional}
+    - {number: '31', name: D2, at: [100, -10], angle: 180, length: 20, kind: bidirectional}
+    - {number: '32', name: D1, at: [100, -30], angle: 180, length: 20, kind: bidirectional}
+    - {number: '33', name: D0, at: [100, -50], angle: 180, length: 20, kind: bidirectional}
+    - {number: '34', name: RESB, at: [100, -70], angle: 180, length: 20, kind: input}
+    - {number: '35', name: RS3, at: [100, -90], angle: 180, length: 20, kind: input}
+    - {number: '36', name: RS2, at: [100, -110], angle: 180, length: 20, kind: input}
+    - {number: '37', name: RS1, at: [100, -130], angle: 180, length: 20, kind: input}
+    - {number: '38', name: RS0, at: [100, -150], angle: 180, length: 20, kind: input}
+    - {number: '39', name: CA2, at: [100, -170], angle: 180, length: 20, kind: bidirectional}
+    - {number: '40', name: CA1, at: [100, -190], angle: 180, length: 20, kind: input}
+    reference: {at: [0, -220]}
+    value: false
+    pin_numbers: true
+  show: []
+  params: []
+
+- type: memory.sram62256
+  title: SRAM 32K × 8 (62256)
+  category: Computer
+  prefix: U
+  keywords: 62256 as6c62256 hm62256 sram ram static memory 32k
+  description: 'A static RAM of 32 KB, JEDEC DIP-28 (AS6C62256, HM62256), drawn in the order of its pins on the breadboard.
+    Emulated with the circuit, bus cycle by bus cycle: its pins drive and read the nets.'
+  datasheet: https://www.alliancememory.com/products/as6c62256/
+  role: mcu
+  board: chip.sram62256
+  symbol:
+    shapes:
+    - {rect: [-70, -150, 70, 150], fill: background}
+    - {arc: [-8, -150, 0, -142, 8, -150]}
+    - {text: '62256', at: [0, -10], size: 10}
+    - {text: SRAM 32K×8, at: [0, 8], size: 7}
+    pins:
+    - {number: '1', name: A14, at: [-90, -130], angle: 0, length: 20, kind: input}
+    - {number: '2', name: A12, at: [-90, -110], angle: 0, length: 20, kind: input}
+    - {number: '3', name: A7, at: [-90, -90], angle: 0, length: 20, kind: input}
+    - {number: '4', name: A6, at: [-90, -70], angle: 0, length: 20, kind: input}
+    - {number: '5', name: A5, at: [-90, -50], angle: 0, length: 20, kind: input}
+    - {number: '6', name: A4, at: [-90, -30], angle: 0, length: 20, kind: input}
+    - {number: '7', name: A3, at: [-90, -10], angle: 0, length: 20, kind: input}
+    - {number: '8', name: A2, at: [-90, 10], angle: 0, length: 20, kind: input}
+    - {number: '9', name: A1, at: [-90, 30], angle: 0, length: 20, kind: input}
+    - {number: '10', name: A0, at: [-90, 50], angle: 0, length: 20, kind: input}
+    - {number: '11', name: D0, at: [-90, 70], angle: 0, length: 20, kind: tri_state}
+    - {number: '12', name: D1, at: [-90, 90], angle: 0, length: 20, kind: tri_state}
+    - {number: '13', name: D2, at: [-90, 110], angle: 0, length: 20, kind: tri_state}
+    - {number: '14', name: GND, at: [-90, 130], angle: 0, length: 20, kind: power_in}
+    - {number: '15', name: D3, at: [90, 130], angle: 180, length: 20, kind: tri_state}
+    - {number: '16', name: D4, at: [90, 110], angle: 180, length: 20, kind: tri_state}
+    - {number: '17', name: D5, at: [90, 90], angle: 180, length: 20, kind: tri_state}
+    - {number: '18', name: D6, at: [90, 70], angle: 180, length: 20, kind: tri_state}
+    - {number: '19', name: D7, at: [90, 50], angle: 180, length: 20, kind: tri_state}
+    - {number: '20', name: '~{CE}', at: [90, 30], angle: 180, length: 20, kind: input}
+    - {number: '21', name: A10, at: [90, 10], angle: 180, length: 20, kind: input}
+    - {number: '22', name: '~{OE}', at: [90, -10], angle: 180, length: 20, kind: input}
+    - {number: '23', name: A11, at: [90, -30], angle: 180, length: 20, kind: input}
+    - {number: '24', name: A9, at: [90, -50], angle: 180, length: 20, kind: input}
+    - {number: '25', name: A8, at: [90, -70], angle: 180, length: 20, kind: input}
+    - {number: '26', name: A13, at: [90, -90], angle: 180, length: 20, kind: input}
+    - {number: '27', name: '~{WE}', at: [90, -110], angle: 180, length: 20, kind: input}
+    - {number: '28', name: VCC, at: [90, -130], angle: 180, length: 20, kind: power_in}
+    reference: {at: [0, -160]}
+    value: false
+    pin_numbers: true
+  show: []
+  params: []
+
+- type: memory.eeprom28c256
+  title: EEPROM 32K × 8 (28C256)
+  category: Computer
+  prefix: U
+  keywords: 28c256 at28c256 eeprom rom memory 32k parallel
+  description: 'A parallel EEPROM of 32 KB, JEDEC DIP-28 (AT28C256), drawn in the order of its pins on the breadboard; its
+    image (Image: a .bin or .hex file) is what a programmer wrote into it. Emulated with the circuit, bus cycle by bus cycle:
+    its pins drive and read the nets.'
+  datasheet: https://ww1.microchip.com/downloads/en/DeviceDoc/doc0006.pdf
+  role: mcu
+  board: chip.eeprom28c256
+  params:
+  - {name: firmware, label: Image, default: '', kind: file, suffixes: [.bin, .hex], description: 'What is programmed into
+      it: a binary image of 32 KB (as an EEPROM programmer writes it; a larger one: its last 32 KB) or an Intel HEX file.'}
+  symbol:
+    shapes:
+    - {rect: [-70, -150, 70, 150], fill: background}
+    - {arc: [-8, -150, 0, -142, 8, -150]}
+    - {text: 28C256, at: [0, -10], size: 10}
+    - {text: EEPROM 32K×8, at: [0, 8], size: 7}
+    pins:
+    - {number: '1', name: A14, at: [-90, -130], angle: 0, length: 20, kind: input}
+    - {number: '2', name: A12, at: [-90, -110], angle: 0, length: 20, kind: input}
+    - {number: '3', name: A7, at: [-90, -90], angle: 0, length: 20, kind: input}
+    - {number: '4', name: A6, at: [-90, -70], angle: 0, length: 20, kind: input}
+    - {number: '5', name: A5, at: [-90, -50], angle: 0, length: 20, kind: input}
+    - {number: '6', name: A4, at: [-90, -30], angle: 0, length: 20, kind: input}
+    - {number: '7', name: A3, at: [-90, -10], angle: 0, length: 20, kind: input}
+    - {number: '8', name: A2, at: [-90, 10], angle: 0, length: 20, kind: input}
+    - {number: '9', name: A1, at: [-90, 30], angle: 0, length: 20, kind: input}
+    - {number: '10', name: A0, at: [-90, 50], angle: 0, length: 20, kind: input}
+    - {number: '11', name: D0, at: [-90, 70], angle: 0, length: 20, kind: tri_state}
+    - {number: '12', name: D1, at: [-90, 90], angle: 0, length: 20, kind: tri_state}
+    - {number: '13', name: D2, at: [-90, 110], angle: 0, length: 20, kind: tri_state}
+    - {number: '14', name: GND, at: [-90, 130], angle: 0, length: 20, kind: power_in}
+    - {number: '15', name: D3, at: [90, 130], angle: 180, length: 20, kind: tri_state}
+    - {number: '16', name: D4, at: [90, 110], angle: 180, length: 20, kind: tri_state}
+    - {number: '17', name: D5, at: [90, 90], angle: 180, length: 20, kind: tri_state}
+    - {number: '18', name: D6, at: [90, 70], angle: 180, length: 20, kind: tri_state}
+    - {number: '19', name: D7, at: [90, 50], angle: 180, length: 20, kind: tri_state}
+    - {number: '20', name: '~{CE}', at: [90, 30], angle: 180, length: 20, kind: input}
+    - {number: '21', name: A10, at: [90, 10], angle: 180, length: 20, kind: input}
+    - {number: '22', name: '~{OE}', at: [90, -10], angle: 180, length: 20, kind: input}
+    - {number: '23', name: A11, at: [90, -30], angle: 180, length: 20, kind: input}
+    - {number: '24', name: A9, at: [90, -50], angle: 180, length: 20, kind: input}
+    - {number: '25', name: A8, at: [90, -70], angle: 180, length: 20, kind: input}
+    - {number: '26', name: A13, at: [90, -90], angle: 180, length: 20, kind: input}
+    - {number: '27', name: '~{WE}', at: [90, -110], angle: 180, length: 20, kind: input}
+    - {number: '28', name: VCC, at: [90, -130], angle: 180, length: 20, kind: power_in}
+    reference: {at: [0, -160]}
+    value: false
+    pin_numbers: true
+  show: []
+
+- type: display.lcd1602
+  title: LCD 16×2 (HD44780)
+  category: Computer
+  prefix: LCD
+  keywords: lcd 1602 16x2 hd44780 character display module
+  description: 'A character display of two lines of 16 with an HD44780 controller: 8 data lines, RS, RW, E, contrast (V0)
+    and backlight (A, K). Emulated with the circuit: while it runs its window shows its two lines, and the serial monitor
+    what it showed.'
+  datasheet: https://www.sparkfun.com/datasheets/LCD/HD44780.pdf
+  role: mcu
+  board: chip.hd44780
+  symbol:
+    shapes:
+    - {rect: [-60, -170, 160, 170], fill: background}
+    - {rect: [-22, -64, 152, 4], fill: outline}
+    - {rect: [-14, -56, 144, -4]}
+    - {text: 16×2, at: [65, 30], size: 10}
+    - {text: HD44780, at: [65, 50], size: 8}
+    pins:
+    - {number: '1', name: VSS, at: [-80, -150], angle: 0, length: 20, kind: power_in}
+    - {number: '2', name: VDD, at: [-80, -130], angle: 0, length: 20, kind: power_in}
+    - {number: '3', name: V0, at: [-80, -110], angle: 0, length: 20, kind: passive}
+    - {number: '4', name: RS, at: [-80, -90], angle: 0, length: 20, kind: input}
+    - {number: '5', name: RW, at: [-80, -70], angle: 0, length: 20, kind: input}
+    - {number: '6', name: E, at: [-80, -50], angle: 0, length: 20, kind: input}
+    - {number: '7', name: DB0, at: [-80, -30], angle: 0, length: 20, kind: bidirectional}
+    - {number: '8', name: DB1, at: [-80, -10], angle: 0, length: 20, kind: bidirectional}
+    - {number: '9', name: DB2, at: [-80, 10], angle: 0, length: 20, kind: bidirectional}
+    - {number: '10', name: DB3, at: [-80, 30], angle: 0, length: 20, kind: bidirectional}
+    - {number: '11', name: DB4, at: [-80, 50], angle: 0, length: 20, kind: bidirectional}
+    - {number: '12', name: DB5, at: [-80, 70], angle: 0, length: 20, kind: bidirectional}
+    - {number: '13', name: DB6, at: [-80, 90], angle: 0, length: 20, kind: bidirectional}
+    - {number: '14', name: DB7, at: [-80, 110], angle: 0, length: 20, kind: bidirectional}
+    - {number: '15', name: A, at: [-80, 130], angle: 0, length: 20, kind: passive}
+    - {number: '16', name: K, at: [-80, 150], angle: 0, length: 20, kind: passive}
+    reference: {at: [65, -180]}
+    value: false
+    pin_numbers: true
+  show: []
+  display: [-14, -56, 144, -4, 16, 2]
+  params: []
+
+- type: oscillator
+  title: Crystal oscillator
+  category: Computer
+  prefix: U
+  keywords: oscillator crystal clock can dip14 xo quartz
+  description: 'A crystal oscillator can (DIL-14 pinout: 1 NC, 7 GND, 8 OUT, 14 VCC): a square wave at its frequency between
+    GND and its supply.'
+  params:
+  - {name: value, label: Frequency, unit: Hz, default: 2.4576 MHz, min: 1, description: The frequency of its output.}
+  - {name: rise, label: Rise time, unit: s, default: 5 ns, min: 0, description: The time of each edge.}
+  spice: '{ref:V}clk {ref}_clk 0 PULSE(0 1 0 {rise} {rise} {{max(0.5/value - rise, rise)}} {{1/value}})
+
+    {ref:B}out {ref}_o {pin.7} V=V({pin.14},{pin.7})*V({ref}_clk)
+
+    {ref:R}out {ref}_o {pin.8} 50
+
+    {ref:R}supply {pin.14} {pin.7} 250'
+  symbol:
+    shapes:
+    - {rect: [-40, -40, 40, 40], fill: background}
+    - {line: [-14, 6, -7, 6, -7, -6, 0, -6, 0, 6, 7, 6, 7, -6, 14, -6]}
+    - {text: OSC, at: [0, -22], size: 8}
+    pins:
+    - {number: '1', name: NC, at: [-60, -20], angle: 0, length: 20, kind: no_connect}
+    - {number: '7', name: GND, at: [-60, 20], angle: 0, length: 20, kind: power_in}
+    - {number: '8', name: OUT, at: [60, 20], angle: 180, length: 20, kind: output}
+    - {number: '14', name: VCC, at: [60, -20], angle: 180, length: 20, kind: power_in}
+    reference: {at: [0, -50]}
+    value: {at: [0, 52]}
+    pin_numbers: true
+  show: [value]
+  quality: generic

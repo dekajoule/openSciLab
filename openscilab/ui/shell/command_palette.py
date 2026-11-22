@@ -115,6 +115,7 @@ class CommandPalette(QDialog):
     def __init__(self, commands: list[Command], parent: Optional[QWidget] = None) -> None:
         super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_DeleteOnClose, False)
+        self.setAttribute(Qt.WA_TranslucentBackground)  # (the rounded corners of its frame)
         self.commands = commands
         self.executed: Optional[Command] = None
 

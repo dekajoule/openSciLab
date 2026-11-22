@@ -15,7 +15,7 @@ on the same time axis as the digital channels. Three ways to draw it, by the sam
 * **points** (zoomed far in): the line and a dot per sample.
 
 The pointer shows the value in the channel's unit; the context menu makes a digital channel from
-a threshold with hysteresis.
+a threshold with hysteresis. A track is dragged by its name to another place among the tracks.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from typing import Optional
 import numpy as np
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QMenu, QSizePolicy, QToolTip, QWidget
+from PySide6.QtWidgets import QApplication, QMenu, QSizePolicy, QToolTip, QWidget
 
 from ...core import units
 from .. import colors
@@ -34,6 +34,7 @@ from ...driver.models import AnalogChannel
 from ..theme import DISPLAY, DISPLAY_ANALOG, qcolor, smaller_font
 
 # the waveform display is dark in both themes
+ACCENT_HOVER = DISPLAY["ACCENT_HOVER"]
 BORDER = DISPLAY["BORDER"]
 TEXT = DISPLAY["TEXT"]
 TEXT_MUTED = DISPLAY["TEXT_MUTED"]
@@ -69,6 +70,10 @@ class AnalogViewer(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._menu)
+        #: a track pressed by its name (channel, y) and the track being dragged
+        self._press: Optional[tuple[AnalogChannel, float]] = None
+        self._dragging: Optional[AnalogChannel] = None
+        self._drop: Optional[tuple[int, float]] = None
         for signal in (model.view_changed, model.samples_appended, model.cursors_changed, model.tiles_arrived,
                        model.marker_changed):
             signal.connect(self.update)
@@ -158,6 +163,10 @@ class AnalogViewer(QWidget):
         overlays.draw_selection(painter, self.model, self.x_for, bounds)
         overlays.draw_cursors(painter, self.model, self.x_for, bounds)
         painter.restore()
+        if self._dragging is not None and self._drop is not None:
+            # where the dragged track goes
+            painter.fillRect(QRectF(0, max(min(self._drop[1] - 1, self.height() - 2), 0), self.width(), 2),
+                             QColor(ACCENT_HOVER))
 
     def _draw_name(self, painter: QPainter, channel: AnalogChannel, rect: QRectF) -> None:
         color = analog_color(channel)
@@ -273,12 +282,63 @@ class AnalogViewer(QWidget):
     def sample_at(self, x: float) -> float:
         return self.model.first_sample + (x - CHANNEL_COLUMN_WIDTH) / self.sample_width()
 
+    def drop_target(self, channel: AnalogChannel, y: float) -> Optional[tuple[int, float]]:
+        """Where ``channel`` dropped at ``y`` goes: its new index among the analog channels and the
+        y of the gap between the shown tracks it goes into (hidden channels keep their places)."""
+        shown = self.channels()
+        channels = self.model.analog_channels
+        if not shown or channel not in channels:
+            return None
+        height = self.model.analog_height
+        others = [other for other in channels if other is not channel]
+        for row, track in enumerate(shown):
+            if y < (row + 0.5) * height:
+                return (channels.index(channel) if track is channel else others.index(track)), row * height
+        last = shown[-1]
+        return (channels.index(channel) if last is channel else others.index(last) + 1), len(shown) * height
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        position = event.position()
+        channel = self.track_at(position.y())
+        if event.button() == Qt.LeftButton and channel is not None and position.x() < CHANNEL_COLUMN_WIDTH:
+            self._press = (channel, position.y())
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        dragging, drop = self._dragging, self._drop
+        self._press = self._dragging = self._drop = None
+        if dragging is not None:
+            self.unsetCursor()
+            if drop is not None:
+                self.model.move_analog_channel(dragging, drop[0])
+            self.update()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt naming
         position = event.position()
+        if self._press is not None and event.buttons() & Qt.LeftButton:
+            channel, start = self._press
+            if self._dragging is None and abs(position.y() - start) >= QApplication.startDragDistance():
+                self._dragging = channel
+                self.setCursor(Qt.ClosedHandCursor)
+                QToolTip.hideText()
+            if self._dragging is not None:
+                self._drop = self.drop_target(self._dragging, position.y())
+                self.update()
+            return
         channel = self.track_at(position.y())
         if channel is None or position.x() < CHANNEL_COLUMN_WIDTH:
             QToolTip.hideText()
+            if channel is not None:
+                self.setCursor(Qt.OpenHandCursor)
+            else:
+                self.unsetCursor()
             return
+        self.unsetCursor()
         sample = self.sample_at(position.x())
         value = self.value_at(channel, sample)
         time = self.model.time_of(sample)

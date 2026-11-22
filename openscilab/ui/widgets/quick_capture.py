@@ -60,6 +60,10 @@ def standard_rates(minimum: int, maximum: int) -> list[int]:
 def trigger_summary(session: CaptureSession) -> str:
     kind = session.trigger_type
     channel = f"CH{session.trigger_channel + 1}"
+    name = next((item.channel_name.strip() for item in session.capture_channels
+                 if item.channel_number == session.trigger_channel and item.channel_name.strip()), "")
+    if name:
+        channel = f"{channel} · {name}"  # (Edge ↑ CH9 · /RESET (C))
     if kind == TriggerType.EDGE and session.trigger_analog_channel is not None:
         channel = f"analog {session.trigger_analog_channel + 1} at {session.trigger_level:g} V"
     if kind == TriggerType.IMMEDIATE:

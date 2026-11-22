@@ -112,6 +112,49 @@ def resample_on_clock(
     return StateCapture(session=state, positions=positions.astype(np.int64), delay=int(delay))
 
 
+def state_clock(session: Optional[CaptureSession]) -> Optional[AnalyzerChannel]:
+    """The clock of a state capture as a channel without samples: every state is one of its edges,
+    so its samples (when it is captured, too) show no edge, but decoders that wait for its edges
+    (Φ2 of the C64 bus) are assigned to it. ``None`` for a timing capture."""
+    if session is None or session.clock_channel is None:
+        return None
+    captured = next((channel for channel in session.capture_channels
+                     if channel.channel_number == session.clock_channel), None)
+    name = session.clock_name or (captured.channel_name if captured is not None else "") or "Clock"
+    return AnalyzerChannel(channel_number=session.clock_channel, channel_name=name)
+
+
+def clocked_states(session: CaptureSession) -> CaptureSession:
+    """The states of ``session`` with their clock (:func:`state_clock`) drawn in, for decoders that
+    wait for its edges: three samples per state, around the clock's level before its edge (the
+    level after it, before it, after it: the bus is stable next to the read point before the edge),
+    and one more before the edge at the end, so the last cycle ends. :func:`state_of_clocked` gives
+    the state of a sample."""
+    count = session.sample_count()
+    before = 0 if EdgeKind(session.clock_edge) == EdgeKind.RISING else 1
+    clock = np.full(3 * count + 1, 1 - before, dtype=np.uint8)
+    clock[1::3] = before
+    clock[-1] = before
+    clocked = CaptureSession(frequency=3 * max(int(session.frequency), 1), pre_trigger_samples=0,
+                             post_trigger_samples=len(clock))
+    clocked.capture_channels = [
+        AnalyzerChannel(channel_number=channel.channel_number, channel_name=channel.channel_name,
+                        samples=np.concatenate((np.repeat(np.asarray(channel.samples, dtype=np.uint8), 3),
+                                                np.asarray(channel.samples[-1:], dtype=np.uint8))))
+        for channel in session.capture_channels
+        if channel.samples is not None and channel.channel_number != session.clock_channel
+    ]
+    clocked.capture_channels.append(AnalyzerChannel(channel_number=session.clock_channel,
+                                                    channel_name=session.clock_name, samples=clock))
+    return clocked
+
+
+def state_of_clocked(sample: int, count: int) -> int:
+    """The state of a sample of :func:`clocked_states` (``count``: the states; ``count`` itself for
+    the end of the last one)."""
+    return min(max(int(sample), 0) // 3, count)
+
+
 #: Read points tried by :func:`suggest_sampling`, relative to the clock edge
 SUGGESTED_DELAYS = (-2, -1, 0, 1)
 #: Clock edges looked at by :func:`suggest_sampling` (the first ones of the capture)

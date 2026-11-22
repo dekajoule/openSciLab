@@ -176,3 +176,94 @@ def test_names_go_to_the_next_capture_of_the_device(shell, monkeypatch):
     capture.capture_channels[0].channel_name = "SCL"
     assert view.use_names_for_device()
     assert card.controller.channel_names().get(0) == "SCL"
+
+
+def _drag_event(drop: bool, y: float, channel):
+    """A drag (``drop``: the drop) of ``channel`` at ``y`` over a channel column."""
+    from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt
+    from PySide6.QtGui import QDragMoveEvent, QDropEvent
+
+    from openscilab.ui.widgets.channel_viewer import CHANNEL_MIME
+
+    data = QMimeData()
+    data.setData(CHANNEL_MIME, str(id(channel)).encode("ascii"))
+    if drop:
+        event = QDropEvent(QPointF(10, y), Qt.MoveAction, data, Qt.LeftButton, Qt.NoModifier)
+    else:
+        event = QDragMoveEvent(QPoint(10, int(y)), Qt.MoveAction, data, Qt.LeftButton, Qt.NoModifier)
+    event.keep = data  # (the event does not own its mime data)
+    return event
+
+
+def test_a_channel_is_dragged_by_its_name(make_dataview, monkeypatch):
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+
+    from openscilab.ui.widgets import channel_viewer
+
+    started = []
+    monkeypatch.setattr(channel_viewer.QDrag, "exec", lambda drag, *args: started.append(drag.mimeData().formats()))
+    view = make_dataview()
+    view.load_session(session(channels=4))
+    view.resize(900, 600)
+    view.show()
+    QApplication.processEvents()
+    viewer = view.channel_viewer
+    rows = viewer.visible_rows()
+    # pressed on the name (a label over the row) - through the window, as the mouse does: the
+    # drag starts all the same
+    window = view.window().windowHandle()
+    start = rows[0].label.mapTo(view.window(), rows[0].label.rect().center())
+    QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start)
+    for step in (5, 10, 20):
+        QTest.mouseMove(window, start + QPoint(0, step))
+    assert started == [[channel_viewer.CHANNEL_MIME]]
+    QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, start + QPoint(0, 20))
+
+    # over the lower half of CH3: the line is between CH3 and CH4, CH1 goes there
+    first = rows[0].channel
+    third = rows[2].geometry()
+    y = third.center().y() + 5
+    viewer.dragMoveEvent(_drag_event(False, y, first))
+    assert viewer.drop_line.isVisibleTo(viewer) and abs(viewer.drop_line.geometry().center().y() - third.bottom()) <= 2
+    viewer.dropEvent(_drag_event(True, y, first))
+    assert not viewer.drop_line.isVisibleTo(viewer)
+    assert [channel.channel_name for channel in view.model.channels] == ["CH2", "CH3", "CH1", "CH4"]
+    # over the upper half of the first row: to the top again; dropped on itself: no move
+    viewer.dropEvent(_drag_event(True, 3, first))
+    assert [channel.channel_name for channel in view.model.channels] == ["CH1", "CH2", "CH3", "CH4"]
+    rows = viewer.visible_rows()
+    assert viewer.drop_target(first, rows[0].geometry().center().y() + 3)[0] == 0
+    view.undo.undo()
+    assert [channel.channel_name for channel in view.model.channels] == ["CH2", "CH3", "CH1", "CH4"]
+
+
+def test_an_analog_track_is_dragged_by_its_name(make_dataview):
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+
+    from tests.test_analog_channels import analog_session
+
+    view = make_dataview()
+    capture = analog_session()
+    capture.analog_channels.append(capture.analog_channels[0].__class__.from_volts(
+        np.zeros(2000), channel_number=2, channel_name="Zero"))
+    view.load_session(capture)
+    view.resize(900, 700)
+    view.show()
+    QApplication.processEvents()
+    viewer = view.analog_viewer
+    height = view.model.analog_height
+    names = lambda: [channel.channel_name for channel in view.model.analog_channels]  # noqa: E731
+    start = QPoint(40, height // 2)
+    QTest.mousePress(viewer, Qt.LeftButton, Qt.NoModifier, start)
+    QTest.mouseMove(viewer, start + QPoint(0, 10))
+    QTest.mouseMove(viewer, QPoint(40, int(height * 2.6)))  # the lower half of the last track
+    assert viewer._drop == (2, 3 * height)
+    QTest.mouseRelease(viewer, Qt.LeftButton, Qt.NoModifier, QPoint(40, int(height * 2.6)))
+    assert names() == ["Ramp", "Zero", "CH1"] and viewer._dragging is None
+    # a click on the name is no drag
+    QTest.mouseClick(viewer, Qt.LeftButton, Qt.NoModifier, start)
+    assert names() == ["Ramp", "Zero", "CH1"]
+    view.undo.undo()
+    assert names() == ["CH1", "Ramp", "Zero"]

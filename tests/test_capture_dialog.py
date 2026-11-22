@@ -211,3 +211,46 @@ def test_blast_settings_keep_their_post_trigger_samples(dialog):
 
     assert dialog.blast_box.isChecked()
     assert dialog.post_samples_box.value() == 4096
+
+
+def test_rates_are_typed_with_their_unit():
+    from openscilab.core.formatting import parse_frequency, to_exact_frequency
+
+    assert [parse_frequency(text) for text in ("1.5 MHz", "500k", "2,5 MHz", "48000", "1.000.000 Hz", "10 mhz")] == [
+        1_500_000, 500_000, 2_500_000, 48_000, 1_000_000, 10_000_000]
+    assert [to_exact_frequency(value) for value in (999, 1_500, 33_333_333, 100_000_000)] == [
+        "999 Hz", "1.5 kHz", "33.333333 MHz", "100 MHz"]  # (every digit kept)
+    with pytest.raises(ValueError):
+        parse_frequency("fast")
+
+
+def test_the_rate_is_typed_and_slid_within_the_device_rates(dialog):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    box, slider = dialog.frequency_box, dialog.rate_slider
+    box.lineEdit().selectAll()
+    QTest.keyClicks(box, "2,5 MHz")
+    QTest.keyClick(box, Qt.Key_Return)
+    assert box.value() == 2_500_000 and box.text() == "2.5 MHz"
+    box.lineEdit().selectAll()
+    QTest.keyClicks(box, "10 GHz")  # more than the device has: its most
+    box.interpretText()
+    QTest.keyClick(box, Qt.Key_Return)
+    assert box.value() == box.maximum()
+    box.setValue(1_000_000)
+    box.stepBy(1)
+    assert box.value() == 2_000_000
+
+    assert slider.isEnabled()
+    slider.setValue(slider.maximum())
+    assert box.value() == box.maximum()
+    slider.setValue(0)
+    assert box.value() == box.minimum()
+    slider.setValue(slider.maximum() // 2)
+    assert box.minimum() < box.value() < box.maximum()
+    assert str(box.value()).strip("0") in "1 12 15 2 25 3 4 5 6 8"  # round numbers in between
+    box.setMaximum(box.value())  # fewer rates (more channels, a stream): the slider follows
+    assert slider.value() == slider.maximum()
+    dialog.blast_box.setChecked(True)
+    assert not slider.isEnabled()

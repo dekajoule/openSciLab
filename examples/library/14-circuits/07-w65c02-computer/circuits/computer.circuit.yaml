@@ -1,0 +1,419 @@
+circuit: W65C02 breadboard computer
+description: 'The complete computer (V1.0) - and it runs: the W65C02S executes firmware/hello.bin from the EEPROM U3 (its Image: a .bin or .hex file, as a programmer writes it), RAM $0000-$3FFF, the VIA at $6000 drives the LCD (its text in the serial monitor) and the four LEDs on PA0-PA3 count. The chips are emulated bus cycle by bus cycle, the decoder (U5), the clock (U8, J1 on FAST - 10 kHz here, so that it runs; the 555 on SLOW) and the LEDs are the circuit. The probes LA1-LA34 are a logic analyzer''s: the data view captures them, flows/trace.flow.yaml decodes the bus, and a simulated Arduino Mega with the signals scenario Circuit traces them as Ben Eater''s monitor does (profile W65C02 breadboard computer - Arduino Mega 2560). Every connection is a wire: the address bus runs above the chips, the data bus below them.'
+version: 1
+settings: {start: power on, step: 10 us, tolerance: '0.05', logic_edge: 100 ns}
+components:
+  C4: {type: capacitor.polarized, at: [-1560, -760], rotation: 270, params: {value: 100u}}
+  PWR1: {type: power, at: [-1560, -780], params: {net: +5V, voltage: 5 V}}
+  GND1: {type: ground, at: [-1560, -740]}
+  C5: {type: capacitor, at: [-1480, -760], rotation: 270, params: {value: 100n}}
+  PWR2: {type: power, at: [-1480, -780], params: {net: +5V, voltage: 5 V}}
+  GND2: {type: ground, at: [-1480, -740]}
+  C6: {type: capacitor, at: [-1410, -760], rotation: 270, params: {value: 100n}}
+  PWR3: {type: power, at: [-1410, -780], params: {net: +5V, voltage: 5 V}}
+  GND3: {type: ground, at: [-1410, -740]}
+  C7: {type: capacitor, at: [-1340, -760], rotation: 270, params: {value: 100n}}
+  PWR4: {type: power, at: [-1340, -780], params: {net: +5V, voltage: 5 V}}
+  GND4: {type: ground, at: [-1340, -740]}
+  C8: {type: capacitor, at: [-1270, -760], rotation: 270, params: {value: 100n}}
+  PWR5: {type: power, at: [-1270, -780], params: {net: +5V, voltage: 5 V}}
+  GND5: {type: ground, at: [-1270, -740]}
+  C9: {type: capacitor, at: [-1200, -760], rotation: 270, params: {value: 100n}}
+  PWR6: {type: power, at: [-1200, -780], params: {net: +5V, voltage: 5 V}}
+  GND6: {type: ground, at: [-1200, -740]}
+  C10: {type: capacitor, at: [-1130, -760], rotation: 270, params: {value: 100n}}
+  PWR7: {type: power, at: [-1130, -780], params: {net: +5V, voltage: 5 V}}
+  GND7: {type: ground, at: [-1130, -740]}
+  C11: {type: capacitor, at: [-1060, -760], rotation: 270, params: {value: 100n}}
+  PWR8: {type: power, at: [-1060, -780], params: {net: +5V, voltage: 5 V}}
+  GND8: {type: ground, at: [-1060, -740]}
+  C12: {type: capacitor, at: [-990, -760], rotation: 270, params: {value: 100n}}
+  PWR9: {type: power, at: [-990, -780], params: {net: +5V, voltage: 5 V}}
+  GND9: {type: ground, at: [-990, -740]}
+  U7: {type: timer555, at: [-1250, -150], params: {value: NE555}}
+  R5: {type: resistor, at: [-1450, -320], rotation: 270, params: {value: 1k}}
+  PWR10: {type: power, at: [-1450, -350], params: {net: +5V, voltage: 5 V}}
+  R6: {type: resistor, at: [-1450, -220], rotation: 270, params: {value: 1k}}
+  RV1: {type: potentiometer, at: [-1450, -120], rotation: 270, params: {value: 1Meg, position: '0.002'}}
+  C1: {type: capacitor.polarized, at: [-1320, 10], rotation: 270, params: {value: 1u}}
+  GND10: {type: ground, at: [-1320, 30]}
+  C2: {type: capacitor, at: [-1240, 10], rotation: 270, params: {value: 100n}}
+  GND11: {type: ground, at: [-1240, 30]}
+  U6A: {type: gate.schmitt, at: [-990, -210], comment: '74HC14 gate 1: pin 1 -> 2 (Schmitt trigger)'}
+  U6B: {type: gate.schmitt, at: [-990, -130], comment: '74HC14 gate 2: pin 3 -> 4'}
+  U8: {type: oscillator, at: [-1050, -10], params: {value: 10 kHz, rise: 500 ns}, comment: 10 kHz here so that the circuit runs live - the real can gives 2.4576 MHz}
+  R7: {type: resistor, at: [-1450, 150], rotation: 270, params: {value: 4.7k}}
+  PWR11: {type: power, at: [-1450, 120], params: {net: +5V, voltage: 5 V}}
+  R8: {type: resistor, at: [-1450, 250], rotation: 270, params: {value: '220'}}
+  SW2: {type: button, at: [-1450, 350], rotation: 270}
+  GND12: {type: ground, at: [-1450, 380]}
+  C3: {type: capacitor.polarized, at: [-1340, 230], rotation: 270, params: {value: 1u}}
+  GND13: {type: ground, at: [-1340, 250]}
+  U6C: {type: gate.schmitt, at: [-990, 180], comment: '74HC14 gate 3: pin 5 -> 6'}
+  J1A: {type: switch, at: [-830, -210], params: {state: '1'}, comment: 'J1 FAST: the jumper wire on this input (only one closed)'}
+  J1B: {type: switch, at: [-830, -130], params: {state: '0'}, comment: 'J1 SLOW: the jumper wire on this input (only one closed)'}
+  J1C: {type: switch, at: [-830, -50], params: {state: '0'}, comment: 'J1 STEP: the jumper wire on this input (only one closed)'}
+  R9: {type: resistor, at: [-690, -170], rotation: 270, params: {value: 1k}}
+  D1: {type: led, at: [-690, -30], rotation: 270, params: {value: LED_RED}}
+  GND14: {type: ground, at: [-690, 0]}
+  R1: {type: resistor, at: [-1520, 560], rotation: 270, params: {value: 1k}}
+  PWR12: {type: power, at: [-1520, 530], params: {net: +5V, voltage: 5 V}}
+  SW1: {type: button, at: [-1520, 660], rotation: 270}
+  GND15: {type: ground, at: [-1520, 690]}
+  R2: {type: resistor, at: [-1420, 590], rotation: 270, params: {value: 1k}}
+  PWR13: {type: power, at: [-1420, 560], params: {net: +5V, voltage: 5 V}}
+  R3: {type: resistor, at: [-1340, 590], rotation: 270, params: {value: 1k}}
+  PWR14: {type: power, at: [-1340, 560], params: {net: +5V, voltage: 5 V}}
+  R4: {type: resistor, at: [-1260, 590], rotation: 270, params: {value: 1k}}
+  PWR15: {type: power, at: [-1260, 560], params: {net: +5V, voltage: 5 V}}
+  U1: {type: cpu.w65c02, at: [0, 0], comment: W65C02S6TPG-14 (DIP-40)}
+  U5A: {type: gate.nand, at: [420, -900], comment: '74HC00 gate 1: pins 1, 2 -> 3 (an inverter)'}
+  U5B: {type: gate.nand, at: [420, -810], comment: '74HC00 gate 2: pins 4, 5 -> 6'}
+  U5C: {type: gate.nand, at: [420, -720], comment: '74HC00 gate 3: pins 9, 10 -> 8'}
+  U2: {type: memory.sram62256, at: [820, 0], comment: AS6C62256-55PCN}
+  U3: {type: memory.eeprom28c256, at: [1420, 0], params: {firmware: ../firmware/hello.bin}, comment: 'AT28C256-15PU, programmed with firmware/hello.bin'}
+  U4: {type: via.w65c22, at: [2080, 0], mirror: true, comment: W65C22S6TPG-14 (DIP-40)}
+  R11: {type: resistor, at: [1900, -250], params: {value: 4.7k}}
+  R12: {type: resistor, at: [2280, 170], mirror: true, params: {value: 4.7k}}
+  R13: {type: resistor, at: [2330, -230], params: {value: 1k}}
+  D2: {type: led, at: [2450, -230], params: {value: LED_RED}}
+  R14: {type: resistor, at: [2330, -190], params: {value: 1k}}
+  D3: {type: led, at: [2450, -190], params: {value: LED_RED}}
+  R15: {type: resistor, at: [2330, -150], params: {value: 1k}}
+  D4: {type: led, at: [2450, -150], params: {value: LED_RED}}
+  R16: {type: resistor, at: [2330, -110], params: {value: 1k}}
+  D5: {type: led, at: [2450, -110], params: {value: LED_RED}}
+  LCD1: {type: display.lcd1602, at: [2780, 20], comment: DEBO LCD16X2 BL (HD44780)}
+  R10: {type: resistor, at: [2620, 200], rotation: 270, params: {value: '220'}}
+  PWR16: {type: power, at: [2620, 170], params: {net: +5V, voltage: 5 V}}
+  RV2: {type: potentiometer, at: [2560, -230], rotation: 270, params: {value: 10k, position: '0.8'}}
+  PWR17: {type: power, at: [2560, -260], params: {net: +5V, voltage: 5 V}}
+  GND16: {type: ground, at: [2560, -200]}
+  LA1: {type: probe.logic, at: [3100, -300], params: {name: A0}}
+  LA2: {type: probe.logic, at: [3100, -320], params: {name: A1}}
+  LA3: {type: probe.logic, at: [3100, -340], params: {name: A2}}
+  LA4: {type: probe.logic, at: [3100, -360], params: {name: A3}}
+  LA5: {type: probe.logic, at: [3100, -380], params: {name: A4}}
+  LA6: {type: probe.logic, at: [3100, -400], params: {name: A5}}
+  LA7: {type: probe.logic, at: [3100, -420], params: {name: A6}}
+  LA8: {type: probe.logic, at: [3100, -440], params: {name: A7}}
+  LA9: {type: probe.logic, at: [3100, -460], params: {name: A8}}
+  LA10: {type: probe.logic, at: [3100, -480], params: {name: A9}}
+  LA11: {type: probe.logic, at: [3100, -500], params: {name: A10}}
+  LA12: {type: probe.logic, at: [3100, -520], params: {name: A11}}
+  LA13: {type: probe.logic, at: [3100, -540], params: {name: A12}}
+  LA14: {type: probe.logic, at: [3100, -560], params: {name: A13}}
+  LA15: {type: probe.logic, at: [3100, -580], params: {name: A14}}
+  LA16: {type: probe.logic, at: [3100, -600], params: {name: A15}}
+  LA17: {type: probe.logic, at: [3100, 280], params: {name: D0}}
+  LA18: {type: probe.logic, at: [3100, 300], params: {name: D1}}
+  LA19: {type: probe.logic, at: [3100, 320], params: {name: D2}}
+  LA20: {type: probe.logic, at: [3100, 340], params: {name: D3}}
+  LA21: {type: probe.logic, at: [3100, 360], params: {name: D4}}
+  LA22: {type: probe.logic, at: [3100, 380], params: {name: D5}}
+  LA23: {type: probe.logic, at: [3100, 400], params: {name: D6}}
+  LA24: {type: probe.logic, at: [3100, 420], params: {name: D7}}
+  LA25: {type: probe.logic, at: [-40, 640], params: {name: PHI2}}
+  LA26: {type: probe.logic, at: [160, 640], params: {name: RW}}
+  LA27: {type: probe.logic, at: [360, 640], params: {name: SYNC}}
+  LA28: {type: probe.logic, at: [560, 640], params: {name: RESB}}
+  LA29: {type: probe.logic, at: [760, 640], params: {name: IRQB}}
+  LA30: {type: probe.logic, at: [960, 640], params: {name: NMIB}}
+  LA31: {type: probe.logic, at: [1160, 640], params: {name: ROM_CE}}
+  LA32: {type: probe.logic, at: [1360, 640], params: {name: RAM_CS}}
+  LA33: {type: probe.logic, at: [1560, 640], params: {name: VIA_CS}}
+  GND17: {type: ground, at: [-1250, -60]}
+  PWR18: {type: power, at: [-1330, -190], rotation: 90, params: {net: +5V, voltage: 5 V}}
+  PWR19: {type: power, at: [-1250, -240], params: {net: +5V, voltage: 5 V}}
+  GND18: {type: ground, at: [-1130, 10], rotation: 270}
+  PWR20: {type: power, at: [-970, -30], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  PWR21: {type: power, at: [-120, -50], rotation: 90, params: {net: +5V, voltage: 5 V}}
+  GND19: {type: ground, at: [120, 190], rotation: 90}
+  PWR22: {type: power, at: [120, -110], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  PWR23: {type: power, at: [120, -150], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  GND20: {type: ground, at: [710, 130], rotation: 270}
+  PWR24: {type: power, at: [930, -130], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  GND21: {type: ground, at: [1310, 130], rotation: 270}
+  GND22: {type: ground, at: [1530, -10], rotation: 90}
+  PWR25: {type: power, at: [1530, -110], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  PWR26: {type: power, at: [1530, -130], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  GND23: {type: ground, at: [2200, -190], rotation: 90}
+  PWR27: {type: power, at: [2200, 150], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  PWR28: {type: power, at: [2200, 190], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  PWR29: {type: power, at: [1960, -190], rotation: 90, params: {net: +5V, voltage: 5 V}}
+  PWR30: {type: power, at: [1850, -250], rotation: 90, params: {net: +5V, voltage: 5 V}}
+  PWR31: {type: power, at: [2330, 170], rotation: 270, params: {net: +5V, voltage: 5 V}}
+  GND24: {type: ground, at: [2500, -230], rotation: 90}
+  GND25: {type: ground, at: [2500, -190], rotation: 90}
+  GND26: {type: ground, at: [2500, -150], rotation: 90}
+  GND27: {type: ground, at: [2500, -110], rotation: 90}
+  GND28: {type: ground, at: [2680, -130], rotation: 270}
+  PWR32: {type: power, at: [2680, -110], rotation: 90, params: {net: +5V, voltage: 5 V}}
+  GND29: {type: ground, at: [2680, 170], rotation: 270}
+wires:
+  - [[-1450, -290], [-1450, -250]]
+  - [[-1450, -190], [-1450, -150]]
+  - [[-1450, -90], [-1450, -70]]
+  - [[-1430, -120], [-1410, -120]]
+  - [[-1320, -10], [-1320, -30]]
+  - [[-1240, -10], [-1240, -30]]
+  - [[-1450, 180], [-1450, 220]]
+  - [[-1450, 280], [-1450, 320]]
+  - [[-1340, 210], [-1340, 190]]
+  - [[-690, -200], [-690, -220]]
+  - [[-690, -140], [-690, -120]]
+  - [[-690, -60], [-690, -80]]
+  - [[-1520, 590], [-1520, 630]]
+  - [[-1420, 620], [-1420, 640]]
+  - [[-1340, 620], [-1340, 640]]
+  - [[-1260, 620], [-1260, 640]]
+  - [[2360, -230], [2420, -230]]
+  - [[2360, -190], [2420, -190]]
+  - [[2360, -150], [2420, -150]]
+  - [[2360, -110], [2420, -110]]
+  - [[2620, 230], [2620, 250]]
+  - [[2580, -230], [2600, -230]]
+  - [[-180, -300], [3040, -300]]
+  - [[3040, -300], [3100, -300]]
+  - [[-200, -320], [3040, -320]]
+  - [[3040, -320], [3100, -320]]
+  - [[-220, -340], [3040, -340]]
+  - [[3040, -340], [3100, -340]]
+  - [[-240, -360], [3040, -360]]
+  - [[3040, -360], [3100, -360]]
+  - [[-260, -380], [3040, -380]]
+  - [[3040, -380], [3100, -380]]
+  - [[-280, -400], [3040, -400]]
+  - [[3040, -400], [3100, -400]]
+  - [[-300, -420], [3040, -420]]
+  - [[3040, -420], [3100, -420]]
+  - [[-300, -440], [3040, -440]]
+  - [[3040, -440], [3100, -440]]
+  - [[-300, -460], [3040, -460]]
+  - [[3040, -460], [3100, -460]]
+  - [[-300, -480], [3040, -480]]
+  - [[3040, -480], [3100, -480]]
+  - [[-300, -500], [3040, -500]]
+  - [[3040, -500], [3100, -500]]
+  - [[-300, -520], [3040, -520]]
+  - [[3040, -520], [3100, -520]]
+  - [[670, -540], [3040, -540]]
+  - [[3040, -540], [3100, -540]]
+  - [[950, -560], [3040, -560]]
+  - [[3040, -560], [3100, -560]]
+  - [[370, -580], [3040, -580]]
+  - [[3040, -580], [3100, -580]]
+  - [[170, -600], [3040, -600]]
+  - [[3040, -600], [3100, -600]]
+  - [[190, 280], [3040, 280]]
+  - [[3040, 280], [3100, 280]]
+  - [[160, 300], [3040, 300]]
+  - [[3040, 300], [3100, 300]]
+  - [[210, 320], [3040, 320]]
+  - [[3040, 320], [3100, 320]]
+  - [[230, 340], [3040, 340]]
+  - [[3040, 340], [3100, 340]]
+  - [[160, 360], [3040, 360]]
+  - [[3040, 360], [3100, 360]]
+  - [[250, 380], [3040, 380]]
+  - [[3040, 380], [3100, 380]]
+  - [[270, 400], [3040, 400]]
+  - [[3040, 400], [3100, 400]]
+  - [[160, 420], [3040, 420]]
+  - [[3040, 420], [3100, 420]]
+  - [[-40, 600], [-40, 640]]
+  - [[160, 600], [160, 640]]
+  - [[360, 600], [360, 640]]
+  - [[560, 600], [560, 640]]
+  - [[760, 600], [760, 640]]
+  - [[960, 600], [960, 640]]
+  - [[1160, 600], [1160, 640]]
+  - [[1360, 600], [1360, 640]]
+  - [[1560, 600], [1560, 640]]
+  - [[-1250, -80], [-1250, -60]]
+  - [[-1310, -190], [-1330, -190]]
+  - [[-1250, -220], [-1250, -240]]
+  - [[-1110, 10], [-1130, 10]]
+  - [[-990, -30], [-970, -30]]
+  - [[-100, -50], [-120, -50]]
+  - [[100, 190], [120, 190]]
+  - [[100, -110], [120, -110]]
+  - [[100, -150], [120, -150]]
+  - [[730, 130], [710, 130]]
+  - [[910, -130], [930, -130]]
+  - [[1330, 130], [1310, 130]]
+  - [[1510, -10], [1530, -10]]
+  - [[1510, -110], [1530, -110]]
+  - [[1510, -130], [1530, -130]]
+  - [[2180, -190], [2200, -190]]
+  - [[2180, 150], [2200, 150]]
+  - [[2180, 190], [2200, 190]]
+  - [[1980, -190], [1960, -190]]
+  - [[1870, -250], [1850, -250]]
+  - [[2310, 170], [2330, 170]]
+  - [[2480, -230], [2500, -230]]
+  - [[2480, -190], [2500, -190]]
+  - [[2480, -150], [2500, -150]]
+  - [[2480, -110], [2500, -110]]
+  - [[2700, -130], [2680, -130]]
+  - [[2700, -110], [2680, -110]]
+  - [[2700, 170], [2680, 170]]
+  - [[1980, -150], [1940, -150], [1940, -300]]
+  - [[-100, -30], [-180, -30], [-180, -300]]
+  - [[730, 50], [710, 50], [710, -300]]
+  - [[1330, 50], [1310, 50], [1310, -300]]
+  - [[1980, -130], [1790, -130], [1790, -320]]
+  - [[-100, -10], [-200, -10], [-200, -320]]
+  - [[730, 30], [690, 30], [690, -320]]
+  - [[1330, 30], [1290, 30], [1290, -320]]
+  - [[910, 10], [980, 10], [980, -500]]
+  - [[1510, 10], [1530, 10], [1530, 160], [980, 160], [980, 10]]
+  - [[-100, 170], [-320, 170], [-320, -500], [-300, -500]]
+  - [[910, -30], [1000, -30], [1000, -520]]
+  - [[1510, -30], [1580, -30], [1580, -180], [1000, -180]]
+  - [[-100, 190], [-340, 190], [-340, -520], [-300, -520]]
+  - [[730, -110], [670, -110], [670, -540]]
+  - [[1330, -110], [1020, -110], [1020, -200], [670, -200]]
+  - [[100, 170], [670, 170], [670, -110]]
+  - [[910, -90], [950, -90], [950, -560]]
+  - [[1510, -90], [1600, -90], [1600, -220], [950, -220]]
+  - [[1980, 130], [1600, 130], [1600, -90]]
+  - [[100, 150], [740, 150], [740, 160], [930, 160], [930, -90]]
+  - [[380, -710], [370, -710], [370, -580]]
+  - [[730, -130], [720, -130], [720, -140], [730, -140], [730, -580]]
+  - [[910, -10], [960, -10], [960, -180], [730, -180]]
+  - [[1330, -130], [960, -130]]
+  - [[100, 130], [650, 130], [650, -130], [720, -130]]
+  - [[380, -890], [350, -890], [350, -600]]
+  - [[380, -910], [370, -910], [370, -890]]
+  - [[100, 110], [170, 110], [170, -600]]
+  - [[1980, -110], [1770, -110], [1770, -340]]
+  - [[-100, 10], [-220, 10], [-220, -340]]
+  - [[730, 10], [630, 10], [630, -340]]
+  - [[1330, 10], [1270, 10], [1270, -340]]
+  - [[1980, -90], [1750, -90], [1750, -360]]
+  - [[730, -10], [610, -10], [610, -360]]
+  - [[1330, -10], [1250, -10], [1250, -360]]
+  - [[-100, 30], [-240, 30], [-240, -360]]
+  - [[730, -30], [590, -30], [590, -380]]
+  - [[1330, -30], [1230, -30], [1230, -380]]
+  - [[-100, 50], [-260, 50], [-260, -380]]
+  - [[730, -50], [570, -50], [570, -400]]
+  - [[1330, -50], [1210, -50], [1210, -400]]
+  - [[-100, 70], [-280, 70], [-280, -400]]
+  - [[730, -70], [550, -70], [550, -420]]
+  - [[1330, -70], [1190, -70], [1190, -420]]
+  - [[-100, 90], [-360, 90], [-360, -420], [-300, -420]]
+  - [[730, -90], [530, -90], [530, -440]]
+  - [[1330, -90], [1320, -90], [1320, -150], [1330, -150], [1330, -440]]
+  - [[-100, 110], [-380, 110], [-380, -440], [-300, -440]]
+  - [[910, -70], [920, -70], [920, -460]]
+  - [[1510, -70], [1620, -70], [1620, -460]]
+  - [[-100, 130], [-400, 130], [-400, -460], [-300, -460]]
+  - [[910, -50], [1040, -50], [1040, -480]]
+  - [[1510, -50], [1640, -50], [1640, -480]]
+  - [[-100, 150], [-420, 150], [-420, -480], [-300, -480]]
+  - [[730, 70], [720, 70], [720, 280]]
+  - [[1330, 70], [1280, 70], [1280, 280]]
+  - [[1980, -50], [1960, -50], [1960, 280]]
+  - [[100, -50], [190, -50], [190, 280]]
+  - [[730, 90], [680, 90], [680, 300]]
+  - [[1330, 90], [1260, 90], [1260, 300]]
+  - [[1980, -30], [1940, -30], [1940, 300]]
+  - [[100, -30], [150, -30], [150, 300], [160, 300]]
+  - [[730, 110], [630, 110], [630, 320]]
+  - [[1330, 110], [1320, 110], [1320, 320]]
+  - [[1980, -10], [1920, -10], [1920, 320]]
+  - [[100, -10], [210, -10], [210, 320]]
+  - [[910, 130], [950, 130], [950, 340]]
+  - [[1510, 130], [1550, 130], [1550, 340]]
+  - [[1980, 10], [1550, 10], [1550, 130]]
+  - [[100, 10], [230, 10], [230, 340]]
+  - [[910, 110], [1000, 110], [1000, 360]]
+  - [[1510, 110], [1570, 110], [1570, 360]]
+  - [[1980, 30], [1570, 30], [1570, 110]]
+  - [[100, 30], [110, 30], [110, 360], [160, 360]]
+  - [[910, 90], [1020, 90], [1020, 380]]
+  - [[1510, 90], [1590, 90], [1590, 380]]
+  - [[1980, 50], [1620, 50], [1620, 90], [1590, 90]]
+  - [[100, 50], [250, 50], [250, 380]]
+  - [[910, 70], [1040, 70], [1040, 400]]
+  - [[1510, 70], [1640, 70], [1640, 400]]
+  - [[1980, 70], [1640, 70]]
+  - [[100, 70], [270, 70], [270, 400]]
+  - [[1980, 90], [1900, 90], [1900, 420]]
+  - [[910, 50], [1060, 50], [1060, 420]]
+  - [[1510, 50], [1610, 50], [1610, 100], [1900, 100]]
+  - [[100, 90], [160, 90], [160, 120], [170, 120], [170, 260], [130, 260], [130, 420], [160, 420]]
+  - [[1510, 30], [1520, 30], [1520, 580], [1160, 580], [1160, 600]]
+  - [[380, -730], [370, -730], [370, -770], [1170, -770], [1170, 180], [1520, 180]]
+  - [[380, -800], [370, -800], [370, -770]]
+  - [[460, -900], [480, -900], [480, -770]]
+  - [[-100, -130], [-140, -130], [-140, 580], [760, 580], [760, 600]]
+  - [[-1340, 640], [-1340, 660], [-140, 660], [-140, 580]]
+  - [[1980, 190], [1970, 190], [1970, 200], [1980, 200], [1980, 560], [760, 560], [760, 580]]
+  - [[-100, -90], [-160, -90], [-160, 540], [960, 540], [960, 600]]
+  - [[-1260, 640], [-160, 640], [-160, 540]]
+  - [[910, 30], [1140, 30], [1140, 610], [1360, 610]]
+  - [[460, -810], [1060, -810], [1060, 30]]
+  - [[560, 600], [420, 600], [420, 680], [-1460, 680], [-1460, 620], [-1520, 620]]
+  - [[100, -190], [290, -190], [290, 680]]
+  - [[1980, -70], [1660, -70], [1660, 440], [290, 440]]
+  - [[1980, 150], [1680, 150], [1680, 600], [1560, 600]]
+  - [[460, -720], [1680, -720], [1680, 150]]
+  - [[1930, -250], [1970, -250], [1970, -170], [1980, -170]]
+  - [[2250, 170], [2180, 170]]
+  - [[-1030, -210], [-1180, -210], [-1180, -170], [-1190, -170]]
+  - [[-1030, -130], [-1040, -130], [-1040, -180], [-940, -180], [-940, -210], [-950, -210]]
+  - [[-860, -210], [-920, -210], [-920, 10], [-990, 10]]
+  - [[-860, -130], [-950, -130]]
+  - [[-860, -50], [-900, -50], [-900, 180], [-950, 180]]
+  - [[-1310, -110], [-1320, -110], [-1320, -40], [-1270, -40], [-1270, -30], [-1240, -30]]
+  - [[-1190, -110], [-1160, -110], [-1160, -280], [-1450, -280]]
+  - [[2700, 150], [2690, 150], [2690, 240], [2620, 240]]
+  - [[2700, -90], [2600, -90], [2600, -230]]
+  - [[-690, -80], [-690, -120]]
+  - [[2300, -230], [2230, -230], [2230, -170], [2180, -170]]
+  - [[2300, -190], [2250, -190], [2250, -150], [2180, -150]]
+  - [[2300, -150], [2260, -150], [2260, -130], [2180, -130]]
+  - [[2300, -110], [2180, -110]]
+  - [[2700, -70], [2180, -70]]
+  - [[2700, -50], [2180, -50]]
+  - [[2700, -30], [2180, -30]]
+  - [[2700, -10], [2180, -10]]
+  - [[2700, 10], [2180, 10]]
+  - [[2700, 30], [2180, 30]]
+  - [[2700, 50], [2180, 50]]
+  - [[2700, 70], [2180, 70]]
+  - [[2700, 90], [2180, 90]]
+  - [[2700, 110], [2180, 110]]
+  - [[2700, 130], [2180, 130]]
+  - [[100, -130], [310, -130], [310, 240], [-40, 240], [-40, 600]]
+  - [[380, -820], [310, -820], [310, -130]]
+  - [[-690, -220], [-440, -220], [-440, 240], [-40, 240]]
+  - [[-800, -210], [-690, -210]]
+  - [[-800, -130], [-790, -130], [-790, -210]]
+  - [[-800, -50], [-790, -50], [-790, -130]]
+  - [[1980, 110], [1880, 110], [1880, 200], [310, 200]]
+  - [[100, -70], [330, -70], [330, 600], [160, 600]]
+  - [[910, -110], [1010, -110], [1010, -90], [1080, -90], [1080, 220], [330, 220]]
+  - [[1980, 170], [1610, 170], [1610, 220], [1080, 220]]
+  - [[-100, -170], [-640, -170], [-640, 520], [-1380, 520], [-1380, 570], [-1400, 570], [-1400, 630], [-1420, 630]]
+  - [[-1340, 190], [-1450, 190]]
+  - [[-1030, 180], [-1340, 180], [-1340, 190]]
+  - [[-100, -70], [-110, -70], [-110, -20], [-120, -20], [-120, 560], [360, 560], [360, 600]]
+  - [[-1410, -120], [-1410, -80], [-1450, -80]]
+  - [[-1310, -130], [-1410, -130], [-1410, -120]]
+  - [[-1320, -30], [-1340, -30], [-1340, -130]]
+  - [[-1190, -130], [-1180, -130], [-1180, -70], [-1340, -70]]
+labels: []
+groups:
+  - {name: Power, comment: '5 V; C4 at the input, 100 nF at each chip (C5 U1 ... C12 U8). 74HC00, 74HC14: pin 14 +5V, pin 7 GND, unused inputs to GND', color: red, members: [C4, PWR1, GND1, C5, PWR2, GND2, C6, PWR3, GND3, C7, PWR4, GND4, C8, PWR5, GND5, C9, PWR6, GND6, C10, PWR7, GND7, C11, PWR8, GND8, C12, PWR9, GND9]}
+  - {name: Clock, comment: '555 0.7-480 Hz (RV1), U8 2.4576 MHz, SW2 single step; J1: close exactly one', color: green, members: [U7, R5, PWR10, R6, w1, RV1, w2, w3, w4, C1, w5, GND10, C2, w6, GND11, U6A, U6B, U8, R7, PWR11, R8, w7, SW2, w8, GND12, C3, w9, GND13, U6C, J1A, J1B, J1C, R9, w10, w11, D1, w12, GND14]}
+  - {name: Reset and pull-ups, comment: 'SW1 pulls /RES low; RDY, /IRQ, /NMI held high', color: blue, members: [R1, PWR12, SW1, w13, GND15, R2, PWR13, w14, R3, PWR14, w15, R4, PWR15, w16]}
+  - {name: CPU, comment: 'BE, SOB at +5V; SYNC to the logic analyzer; VPB, PHI1O, MLB, PHI2O open', color: purple, members: [U1]}
+  - {name: Address decoding, comment: '74HC00: ROM A15 = 1, RAM A15 = 0 and PHI2, VIA A15 = 0, A14 = 1', color: yellow, members: [U5A, U5B, U5C]}
+  - {name: Memory, comment: 'RAM $0000-$3FFF (/OE = A14), ROM $8000-$FFFF (/WE at +5V)', color: purple, members: [U2, U3]}
+  - {name: 'VIA, LCD and LEDs', comment: 'VIA $6000: ORB $6000 LCD data, ORA $6001 LCD RS/RW/E (PA5-7) and LEDs (PA0-3)', color: gray, members: [U4, R11, R12, R13, D2, w17, R14, D3, w18, R15, D4, w19, R16, D5, w20, LCD1, R10, PWR16, w21, RV2, PWR17, GND16, w22]}
+  - {name: 'Logic analyzer: buses', comment: 'A0-A15, D0-D7 - the trunks of the buses end here', color: blue, members: [w24, LA1, w26, LA2, w28, LA3, w30, LA4, w32, LA5, w34, LA6, w36, LA7, w38, LA8, w40, LA9, w42, LA10, w44, LA11, w46, LA12, w48, LA13, w50, LA14, w52, LA15, w54, LA16, w56, LA17, w58, LA18, w60, LA19, w62, LA20, w64, LA21, w66, LA22, w68, LA23, w70, LA24]}
+  - {name: 'Logic analyzer: control lines', comment: 'PHI2 (the clock of a state capture), R/W, SYNC, reset, interrupts, selects', color: blue, members: [w71, LA25, w72, LA26, w73, LA27, w74, LA28, w75, LA29, w76, LA30, w77, LA31, w78, LA32, w79, LA33]}

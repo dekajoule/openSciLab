@@ -175,9 +175,8 @@ def test_the_bars_of_the_application_fit_a_small_window(shell):
 
 def test_a_dialog_of_a_tool_bar_has_the_background_of_a_dialog(shell, monkeypatch):
     """A dialog that is a child of a tool bar took over its transparent background (it showed white)."""
-    from PySide6.QtWidgets import QDialog
-
     from openscilab.driver.simulated import open_simulated
+    from openscilab.ui.dialogs.capture_dialog import CaptureDialog
     from openscilab.ui.theme import BACKGROUND, build_stylesheet
 
     assert "QToolBar QDialog {\n    background-color: " + BACKGROUND in build_stylesheet()
@@ -185,6 +184,6 @@ def test_a_dialog_of_a_tool_bar_has_the_background_of_a_dialog(shell, monkeypatc
     shell.hub.add(instrument)
     view = shell.show_data(instrument)
     parents = []
-    monkeypatch.setattr(QDialog, "exec", lambda self: parents.append(self.parentWidget()) or 0)
+    monkeypatch.setattr(CaptureDialog, "exec", lambda self: parents.append(self.parentWidget()) or 0)
     view.capture_controls.capture_settings()
     assert parents and parents[0] is view.window()  # not the tool bar

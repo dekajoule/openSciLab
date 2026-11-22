@@ -51,14 +51,11 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMenu,
     QPushButton,
     QRadioButton,
     QScrollArea,
     QSpinBox,
-    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -67,6 +64,7 @@ from PySide6.QtWidgets import (
 from ...core import settings
 from .. import colors
 from ...core.capture_io import session_from_dict, session_to_dict
+from ...core.device_summary import channel_label
 from ...core.formatting import to_bytes, to_large_frequency, to_small_time, to_thousands
 from ...core.sample_store import disk_sample_bytes
 from ...core.profiles import (
@@ -98,8 +96,10 @@ from ...driver.base import (
 )
 from ...driver.models import AnalogChannel, AnalyzerChannel, CaptureSession, ConditionKind, EdgeKind, TriggerType
 from .. import messages
-from ..theme import BORDER, ERROR, set_role, size
-from ..icons import icon, set_icon
+from ..theme import BORDER, set_role, size
+from ..icons import set_icon
+from ..widgets.capture_timeline import CapturePlan, CaptureTimeline
+from ..widgets.frequency_box import FrequencyBox, RateSlider
 from .common import InlineMessage, button_box, dialog_layout, hint
 
 log = logging.getLogger(__name__)
@@ -299,34 +299,33 @@ class CaptureDialog(QDialog):
         self._loading_session = False
 
         self.setWindowTitle("Capture setup")
-        self.resize(900, 620)
+        self.resize(960, 780)
 
         layout = dialog_layout(self)
-        # pages: what to sample, which channels, when to start; a list of them on the left
-        body = QHBoxLayout()
-        self.page_list = QListWidget(self)
-        self.page_list.setFixedWidth(size("page-list"))
-        self.page_list.setAccessibleName("Pages of the capture setup")
-        self.pages = QStackedWidget(self)
         # built in this order: the trigger reads the sampling and channel controls
         parameters = self._build_parameters()
-        channels = self._build_channels()
+        self.channels_group = self._build_channels()
         self.trigger_group = self._build_trigger()
-        for title, icon_name, widget in (("Sampling", "clock", parameters), ("Channels", "channels", channels),
-                                         ("Trigger", "target", self.trigger_group)):
-            self.page_list.addItem(QListWidgetItem(icon(icon_name), title))
-            page = QWidget(self.pages)
-            page_layout = QVBoxLayout(page)
-            page_layout.setContentsMargins(0, 0, 0, 0)
-            page_layout.addWidget(widget, 1 if title == "Channels" else 0)
-            if title != "Channels":
-                page_layout.addStretch(1)
-            self.pages.addWidget(page)
-        self.page_list.currentRowChanged.connect(self.pages.setCurrentIndex)
-        self.page_list.setCurrentRow(0)
-        body.addWidget(self.page_list)
-        body.addWidget(self.pages, 1)
-        layout.addLayout(body, 1)
+        self._refresh_channel_labels()  # (the clock list was made before the channels)
+        # what will be captured around the trigger, in view while the page scrolls
+        timeline_group = QGroupBox("Capture around the trigger", self)
+        self.timeline = CaptureTimeline(timeline_group)
+        self.timeline.requested.connect(self._apply_timeline)
+        QVBoxLayout(timeline_group).addWidget(self.timeline)
+        layout.addWidget(timeline_group)
+        # one page, scrolled as a whole: what to sample, when to start, which channels (the longest
+        # part, a Mega has 70 of them: last)
+        self.page_scroll = QScrollArea(self)
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QFrame.NoFrame)
+        page = QWidget(self.page_scroll)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 6, 0)
+        for widget in (parameters, self.trigger_group, self.channels_group):
+            page_layout.addWidget(widget)
+        page_layout.addStretch(1)
+        self.page_scroll.setWidget(page)
+        layout.addWidget(self.page_scroll, 1)
         # what the capture will be, whatever page is shown
         self.overview_label = QLabel(self)
         set_role(self.overview_label, "hint")
@@ -366,6 +365,10 @@ class CaptureDialog(QDialog):
         buttons.rejected.connect(self.reject)
         self.reset_button.clicked.connect(self.reset_settings)
         layout.addWidget(buttons)
+        # (before the settings are loaded: their samples after the trigger fit next to theirs before it)
+        self.pre_samples_box.valueChanged.connect(self._fit_sample_ranges)
+        self.burst_box.toggled.connect(self._fit_sample_ranges)
+        self.burst_count_box.valueChanged.connect(self._fit_sample_ranges)
 
         self._apply_driver_mode()
         self._load_settings()
@@ -398,12 +401,9 @@ class CaptureDialog(QDialog):
         grid.setVerticalSpacing(6)
 
         grid.addWidget(QLabel("Rate", group), 0, 0)
-        self.frequency_box = QSpinBox(group)
-        self.frequency_box.setGroupSeparatorShown(True)
-        self.frequency_box.setSuffix(" Hz")
+        self.frequency_box = FrequencyBox(group)
         self.frequency_box.setRange(max(self.driver.min_frequency, 1), self.driver.max_frequency)
         self.frequency_box.setValue(self.driver.max_frequency)
-        self.frequency_box.setSingleStep(1000)
         self.frequency_box.setMinimumWidth(170)
         self.frequency_box.valueChanged.connect(self._update_jitter)
         grid.addWidget(self.frequency_box, 0, 1)
@@ -453,6 +453,10 @@ class CaptureDialog(QDialog):
             self.jitter_label.setVisible(False)
         else:
             self.rate_box.setVisible(False)
+        # the rate on a slider, between the rates the device has with these channels and this mode
+        self.rate_slider = RateSlider(self.frequency_box, self.rate_box if self.fixed_rates else None, group)
+        self.rate_slider.setMinimumWidth(160)
+        grid.addWidget(self.rate_slider, 0, 3)
 
         self.acquisition_label = QLabel("Mode", group)
         grid.addWidget(self.acquisition_label, 2, 0)
@@ -517,7 +521,7 @@ class CaptureDialog(QDialog):
             log.debug("clock_channels = list(self.driver.state_clock_channels()) failed: a driver that cannot say: every channel", exc_info=True)
             clock_channels = list(range(self.driver.channel_count))
         for number in clock_channels:
-            self.clock_channel_box.addItem(f"Channel {number + 1}", number)
+            self.clock_channel_box.addItem(f"Channel {number + 1}", number)  # (named by _refresh_channel_labels)
         #: (channel, name) of the clock of the loaded settings (``CaptureSession.clock_name``)
         self._clock_name: tuple[Optional[int], str] = (None, "")
         grid.addWidget(self.clock_channel_box, 3, 1)
@@ -537,6 +541,7 @@ class CaptureDialog(QDialog):
     def _update_clock_mode(self, checked: bool) -> None:
         self.clock_channel_box.setEnabled(checked)
         self.clock_edge_box.setEnabled(checked)
+        self._update_timeline()
         self.frequency_box.setEnabled(not checked)
         self.rate_box.setEnabled(not checked)
 
@@ -614,6 +619,8 @@ class CaptureDialog(QDialog):
         self.rate_box.blockSignals(False)
         if rates:
             self.frequency_box.setValue(rates[index])
+        if hasattr(self, "rate_slider"):
+            self.rate_slider.follow()  # (the list changed without a word)
 
     def _on_rate_selected(self, index: int) -> None:
         rate = self.rate_box.itemData(index)
@@ -636,10 +643,7 @@ class CaptureDialog(QDialog):
             header.addWidget(button)
         outer.addLayout(header)
 
-        scroll = QScrollArea(group)
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        content = QWidget(scroll)
+        content = QWidget(group)  # (no scroll of its own: the page scrolls)
         grid = QGridLayout(content)
         grid.setContentsMargins(0, 0, 4, 0)
         grid.setHorizontalSpacing(6)
@@ -693,6 +697,8 @@ class CaptureDialog(QDialog):
                     break
                 selector = ChannelSelector(number, content, names[number] if names else "")
                 add(selector, row, offset + 1)
+                selector.name_edit.textChanged.connect(lambda _text: self._refresh_channel_labels())
+                selector.enable_box.toggled.connect(lambda _checked: self._refresh_channel_labels())
                 self.channel_selectors.append(selector)
 
         # Analog inputs (devices with CAPABILITY_ANALOG): rows of their own below the logic channels
@@ -708,9 +714,7 @@ class CaptureDialog(QDialog):
                 add(selector, row, number - first + 1)
                 self.analog_selectors.append(selector)
 
-        grid.setRowStretch(grid.rowCount(), 1)
-        scroll.setWidget(content)
-        outer.addWidget(scroll, 1)
+        outer.addWidget(content)
         return group
 
     def _channel_names(self) -> list[str]:
@@ -723,6 +727,41 @@ class CaptureDialog(QDialog):
             log.debug("The channel names of the device could not be read", exc_info=True)
             return []
         return names if len(names) == self.driver.channel_count and all(names) else []
+
+    def _given_name(self, number: Optional[int]) -> str:
+        """The name typed for a channel in the channel table (empty: none, or not captured)."""
+        selectors = getattr(self, "channel_selectors", [])
+        if number is None or not 0 <= number < len(selectors) or not selectors[number].enabled:
+            return ""
+        return selectors[number].channel_name.strip()
+
+    def _channel_label(self, number: int) -> str:
+        """A channel in the lists to choose one (trigger, clock, sequence): its number, the device's
+        pin (D2) and its name (that of the channel table, else of the loaded clock), e.g.
+        ``Channel 31 · D2 · Φ2 (E)``."""
+        if not hasattr(self, "_pin_names"):
+            self._pin_names = self._channel_names()
+        pin = self._pin_names[number] if number < len(self._pin_names) else ""
+        name = self._given_name(number)
+        if not name and getattr(self, "_clock_name", (None, ""))[0] == number:
+            name = self._clock_name[1]
+        board = number // self.driver.channels_per_device + 1 if self.driver.board_count > 1 else None
+        return channel_label(number, pin, name, board)
+
+    def _refresh_channel_labels(self) -> None:
+        """Name the channels of the trigger, clock and sequence lists anew (a name was typed)."""
+        if self._loading_session:
+            return
+        for box in (getattr(self, "clock_channel_box", None), getattr(self, "trigger_channel_box", None)):
+            if box is None:
+                continue
+            for item in range(box.count()):
+                number = box.itemData(item)
+                if isinstance(number, int) and 0 <= number < self.driver.channel_count:
+                    box.setItemText(item, self._channel_label(number))
+        editor = getattr(self, "sequence_editor", None)
+        if editor is not None:
+            editor.set_channel_labels({number: self._channel_label(number) for number, _label in editor.channels})
 
     def enabled_analog(self) -> list[int]:
         return [selector.channel_number for selector in self.analog_selectors if selector.enabled]
@@ -847,7 +886,7 @@ class CaptureDialog(QDialog):
         # On a stream the application evaluates any sequence; the device only its own kinds
         hardware_stages, hardware_kinds = self.hardware_sequence or (0, ())
         self.sequence_editor = SequenceEditor(
-            [(number, f"Channel {number + 1}") for number in range(self.driver.channel_count)],
+            [(number, self._channel_label(number)) for number in range(self.driver.channel_count)],
             max(hardware_stages, SOFTWARE_SEQUENCE_STAGES if self.can_stream else 0) or 1,
             tuple(ConditionKind) if self.can_stream else hardware_kinds,
             group,
@@ -911,14 +950,8 @@ class CaptureDialog(QDialog):
         box.clear()
         channels = self.driver.edge_trigger_channels()
         multi = self.driver.board_count > 1
-        if multi:
-            per_device = self.driver.channels_per_device
-            for index in channels:
-                box.addItem(f"Channel {index + 1} (board {index // per_device + 1})", index)
-        else:
-            names = self._channel_names()
-            for index in channels:
-                box.addItem(names[index] if names else f"Channel {index + 1}", index)
+        for index in channels:
+            box.addItem(self._channel_label(index), index)
         if self.driver.is_hardware and self.driver.has_external_trigger():
             box.addItem(
                 "External trigger (every board)" if multi else "External trigger",
@@ -1014,6 +1047,7 @@ class CaptureDialog(QDialog):
         if not self.blast_box.isChecked():
             self.pre_samples_box.setRange(self.limits.min_pre_samples, self.limits.max_pre_samples)
         self.post_samples_box.setRange(self.limits.min_post_samples, self.limits.max_post_samples)
+        self._fit_sample_ranges()
 
         self.pre_samples_box.setToolTip(
             f"Samples kept before the trigger\n"
@@ -1078,6 +1112,7 @@ class CaptureDialog(QDialog):
             text += f"; on disk: {to_bytes(total * channels * (2 if self.continuous() else 1))} of {to_bytes(disk_sample_bytes())} free"
         self.summary_label.setText(text)
         set_role(self.summary_label, "error" if total > maximum else "hint")
+        self._update_timeline()
 
     def _update_jitter(self) -> None:
         frequency = self.frequency_box.value()
@@ -1147,6 +1182,8 @@ class CaptureDialog(QDialog):
             self.blast_box.setChecked(False)
         if hasattr(self, "validation_label"):
             self.validation_label.clear()
+        self._fit_sample_ranges()
+        self._update_timeline()
 
     def _update_burst_mode(self, checked: bool) -> None:
         self.burst_count_box.setEnabled(checked)
@@ -1336,6 +1373,7 @@ class CaptureDialog(QDialog):
             self._apply_session(session)
         finally:
             self._loading_session = False
+        self._refresh_channel_labels()
 
     def _apply_session(self, session: CaptureSession) -> None:
         self.reset_settings()
@@ -1368,16 +1406,12 @@ class CaptureDialog(QDialog):
                 selector.channel_color = channel.channel_color
                 selector._update_color()
         self._clock_name = (None, "")
-        for item in range(self.clock_channel_box.count()):
-            self.clock_channel_box.setItemText(item, f"Channel {self.clock_channel_box.itemData(item) + 1}")
         if session.clock_channel is not None and CAPABILITY_STATE_MODE in self.capabilities:
             self.clock_box.setChecked(True)
             index = self.clock_channel_box.findData(session.clock_channel)
             if index >= 0 and session.clock_name:
-                # the clock is no channel of the capture: its name (Φ2 ...) stays with its channel here
+                # a clock that is no channel of the capture: its name (Φ2 ...) stays with its channel here
                 self._clock_name = (session.clock_channel, session.clock_name)
-                self.clock_channel_box.setItemText(index, f"Channel {session.clock_channel + 1} · "
-                                                          f"{session.clock_name}")
             self.clock_channel_box.setCurrentIndex(max(index, 0))
             self.clock_edge_box.setCurrentIndex(max(self.clock_edge_box.findData(session.clock_edge), 0))
 
@@ -1452,19 +1486,11 @@ class CaptureDialog(QDialog):
         self.accept()
 
     def _reject_settings(self, message: str, focus: Optional[QWidget] = None) -> None:
-        """What is wrong, on the page where it can be fixed (marked in the list)."""
+        """What is wrong, scrolled to where it can be fixed."""
         self.validation_label.show_error(message)
-        page = None
-        if focus is not None:
-            page = next((index for index in range(self.pages.count())
-                         if self.pages.widget(index).isAncestorOf(focus)), None)
-        elif "channel" in message.lower():
-            page = 1
-        for index in range(self.page_list.count()):
-            item = self.page_list.item(index)
-            item.setIcon(icon("info", ERROR) if index == page else icon(("clock", "channels", "target")[index]))
-        if page is not None:
-            self.page_list.setCurrentRow(page)
+        target = focus if focus is not None else self.channels_group if "channel" in message.lower() else None
+        if target is not None:
+            self.page_scroll.ensureWidgetVisible(target)
         if focus is not None:
             focus.setFocus()
 
@@ -1474,9 +1500,51 @@ class CaptureDialog(QDialog):
         trigger = next((name for radio, name in ((self.edge_radio, "edge"), (self.pattern_radio, "pattern"),
                                                  (self.immediate_radio, "none"), (self.sequence_radio, "sequence"))
                         if radio.isChecked()), "")
+        self._update_timeline()
         self.overview_label.setText(
             f"{channels} channel{'s' if channels != 1 else ''} · {self.frequency_box.value():,} Hz · "
             f"{total:,} samples" + (f" · trigger: {trigger}" if trigger else ""))
+
+    def _bursts(self) -> int:
+        """Captures per trigger (bursts of an edge trigger)."""
+        edge = self.edge_radio.isChecked()
+        return self.burst_count_box.value() if self.burst_box.isChecked() and self.burst_box.isEnabled() and edge else 1
+
+    def _fit_sample_ranges(self) -> None:
+        """Only counts the device captures: the samples after the trigger (of every burst) fit next to
+        those before it, which leave room for the fewest after it. (The samples before the trigger
+        come first: a profile sets them first, and dragging the trigger to the right ends the capture
+        where it did.)"""
+        if not hasattr(self, "immediate_radio"):
+            return
+        limits, bursts = self.limits, self._bursts()
+        total = limits.max_total_samples
+        if not self.blast_box.isChecked():
+            self.pre_samples_box.setMaximum(max(min(limits.max_pre_samples, total - limits.min_post_samples * bursts),
+                                                limits.min_pre_samples))
+        pre = 0 if self.immediate_radio.isChecked() else self.pre_samples_box.value()
+        self.post_samples_box.setMaximum(max(min(limits.max_post_samples, (total - pre) // bursts),
+                                             limits.min_post_samples))
+
+    def _apply_timeline(self, pre: int, total: int) -> None:
+        """Samples asked for on the time line, as far as the device captures them."""
+        if self.pre_samples_box.isEnabled():
+            self.pre_samples_box.setValue(pre)
+        pre = 0 if self.immediate_radio.isChecked() else self.pre_samples_box.value()
+        self.post_samples_box.setValue(max(total - pre, 1) // self._bursts())
+
+    def _update_timeline(self) -> None:
+        if not hasattr(self, "timeline"):
+            return
+        start = ("start" if self.immediate_radio.isChecked()
+                 else "sequence" if self.sequence_radio.isChecked() else "trigger")
+        pre_box, post_box = self.pre_samples_box, self.post_samples_box
+        self.timeline.set_plan(CapturePlan(
+            pre=0 if start == "start" else pre_box.value(),  # (as build_session)
+            post=post_box.value(), rate=self.frequency_box.value(), bursts=self._bursts(), start=start,
+            continuous=self.continuous(), state=self.clock_box.isVisible() and self.clock_box.isChecked(),
+            movable=start != "start" and pre_box.isEnabled() and pre_box.maximum() > pre_box.minimum(),
+            resizable=post_box.isEnabled() and post_box.maximum() > post_box.minimum()))
 
     def build_session(self) -> Optional[CaptureSession]:
         """Validate the dialog; return the configured session or ``None``."""
@@ -1573,9 +1641,10 @@ class CaptureDialog(QDialog):
             return None
         if self.clock_box.isVisible() and self.clock_box.isChecked():
             session.clock_channel = self.clock_channel_box.currentData()
-            session.clock_edge = self.clock_edge_box.currentData()
+            session.clock_edge = EdgeKind(self.clock_edge_box.currentData())  # Qt hands back the bare str
             named, name = self._clock_name
-            session.clock_name = name if named == session.clock_channel else ""
+            session.clock_name = self._given_name(session.clock_channel) or (
+                name if named == session.clock_channel else "")
 
         if self.sequence_radio.isChecked():
             try:

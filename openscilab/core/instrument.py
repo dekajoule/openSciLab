@@ -505,6 +505,11 @@ class SimulationFacet(Facet):
         """What it simulates now (scenario, its parameters, the signals of single channels)."""
         raise NotImplementedError
 
+    def scenario_defaults(self, key: str) -> dict:
+        """The defaults of the parameters of scenario ``key`` for this device: signals its captures
+        can show (a step rate, a baud rate that fit its highest rate)."""
+        raise NotImplementedError
+
     def apply_signals(self, config: dict) -> tuple[dict, dict]:
         """Simulate ``config`` at once; returns it as applied and the names it suggests for the
         channels (``{channel index: name}``). Raises ``ValueError`` when it does not fit."""

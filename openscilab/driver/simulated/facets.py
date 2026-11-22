@@ -676,7 +676,12 @@ class SimulationControl(SimulationFacet):
     def signals(self) -> dict:
         from . import scenarios
 
-        return scenarios.normalized(self.device.signals)
+        return scenarios.normalized(self.device.signals, scenarios.max_rate(self.device))
+
+    def scenario_defaults(self, key: str) -> dict:
+        from . import scenarios
+
+        return scenarios.SCENARIOS[key].defaults(scenarios.max_rate(self.device))
 
     def apply_signals(self, config: dict) -> tuple[dict, dict]:
         from . import scenarios

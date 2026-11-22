@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import colors
+from ...core.state_mode import state_clock
 from ...driver.models import CaptureSession
 from ...sigrok.engine import DecoderRegistry
 from ...sigrok.provider import DecoderInstance, SigrokProvider
@@ -54,6 +55,47 @@ SHUTDOWN_WAIT_MS = 1000
 #: not destroy a running thread (Qt aborts the application then); a worker deletes itself
 #: when it is done.
 _running_workers: set = set()
+
+
+def assignable_channels(model) -> list:
+    """The channels decoders can be assigned to: those of the capture and the clock of a state
+    capture (Φ2 of the C64 bus: every state is one of its edges)."""
+    clock = state_clock(getattr(model, "session", None))
+    channels = list(model.channels)
+    if clock is not None and all(channel.channel_number != clock.channel_number for channel in channels):
+        channels.append(clock)
+    return channels
+
+
+def refit_channels_by_name(info, instance: DecoderInstance, channels) -> bool:
+    """Assignments a capture does not fit, found again by name; returns whether one changed.
+
+    A decoder channel assigned to a channel the capture does not have, or to one of another name
+    while the capture has a channel of its own name (A14 on */EXROM (9)* next to *A14 (H)*: the
+    decoders of a profile on a capture whose channels are numbered otherwise), goes to the channel
+    of its name. Assignments to unnamed channels stay: a decoder never reads another channel
+    because the channels were renumbered.
+    """
+    def key(name) -> str:
+        return (name or "").strip().lower()
+
+    by_name = {key(channel.channel_name): channel.channel_number for channel in channels if channel.channel_name}
+    names = {channel.channel_number: key(channel.channel_name) for channel in channels}
+    changed = False
+    for decoder_channel in info.channels:
+        current = instance.channel_map.get(decoder_channel.index)
+        if current is None or (current in names and not names[current]):
+            continue
+        own = {decoder_channel.id.lower(), key(decoder_channel.name)}
+        if names.get(current) in own:
+            continue
+        number = by_name.get(decoder_channel.id.lower())
+        if number is None:  # not "or": capture channel 0 is a valid match
+            number = by_name.get(key(decoder_channel.name))
+        if number is not None and number != current:
+            instance.channel_map[decoder_channel.index] = number
+            changed = True
+    return changed
 
 
 class DecodeWorker(QThread):
@@ -306,7 +348,7 @@ class DecoderManager(QWidget):
 
     def _auto_assign_channels(self, info, instance: DecoderInstance) -> None:
         """Pre-assign capture channels whose name matches the decoder channel."""
-        channels = self.model.channels
+        channels = assignable_channels(self.model)
         by_name = {
             (channel.channel_name or "").strip().lower(): channel.channel_number
             for channel in channels
@@ -344,7 +386,7 @@ class DecoderManager(QWidget):
         if info is None:
             return
         self.close_editor()
-        editor = DecoderOptionsDialog(info, instance, self.model.channels, self.options_holder)
+        editor = DecoderOptionsDialog(info, instance, assignable_channels(self.model), self.options_holder)
         editor.setWindowFlags(Qt.Widget)  # a part of the panel, not a window of its own
         editor.accepted.connect(lambda: self._edited(instance))
         editor.rejected.connect(self.close_editor)
@@ -380,6 +422,7 @@ class DecoderManager(QWidget):
     def load_configuration(self, configuration) -> None:
         """Replace every decoder with a stored configuration (profiles)."""
         self.provider.load_configuration(configuration)
+        self._refit_channels()
         self.refresh()
         self.decode_if_automatic()
 
@@ -403,7 +446,7 @@ class DecoderManager(QWidget):
             else:
                 missing = self.provider.missing_channels(instance)
                 # assigned to channels this capture does not have
-                missing += self.provider.unavailable_channels(instance, self.model.channels)
+                missing += self.provider.unavailable_channels(instance, assignable_channels(self.model))
                 if missing:
                     item.setText(f"{name}  (channels missing)")
                 item.setToolTip(
@@ -443,7 +486,21 @@ class DecoderManager(QWidget):
         instance.enabled = item.checkState() == Qt.Checked
         self.decode_if_automatic()
 
+    def _refit_channels(self) -> None:
+        """The decoders on the channels of their names where the capture does not fit them."""
+        channels = assignable_channels(self.model)
+        if not channels:
+            return
+        changed = False
+        for instance in self.provider.instances:
+            info = self.provider.info_for(instance)
+            if info is not None:
+                changed |= refit_channels_by_name(info, instance, channels)
+        if changed:
+            self.refresh()
+
     def _on_capture_changed(self) -> None:
+        self._refit_channels()
         self._refresh_buttons()
         if self._waiting_for_transfer and self.model.progressive is None:
             self._waiting_for_transfer = False

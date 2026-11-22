@@ -409,7 +409,8 @@ class SignalsPanel(QWidget):
         self.refresh_table()
 
     def _scenario_changed(self) -> None:
-        self._build_form({})
+        # (the defaults for this device: signals its captures can show)
+        self._build_form(self.simulation.scenario_defaults(self.scenario_box.currentData() or "default"))
         self.message.clear()
 
     def _build_form(self, values: dict) -> None:

@@ -353,3 +353,17 @@ def test_the_max_button_fills_the_buffer(application):
         assert dialog.pre_samples_box.value() + dialog.post_samples_box.value() == limits.max_total_samples
     finally:
         dialog.close()
+
+
+def test_the_rate_slider_steps_through_the_rates_of_the_list(pro32):
+    dialog = CaptureDialog(pro32)
+    try:
+        select(dialog, range(32))
+        slider = dialog.rate_slider
+        assert slider.maximum() == dialog.rate_box.count() - 1
+        slider.setValue(0)
+        assert dialog.frequency_box.value() == dialog.rate_box.itemData(0)
+        slider.setValue(slider.maximum())
+        assert dialog.frequency_box.value() == 250_000_000
+    finally:
+        dialog.close()

@@ -8,7 +8,7 @@ import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from openscilab.driver.base import ACQUISITION_STREAM
 from openscilab.driver.models import TriggerType
@@ -58,7 +58,7 @@ def test_the_record_buttons_follow_the_device(shell):
     instrument = open_simulated("pico")
     shell.hub.add(instrument)
     card = shell.open_device_card(instrument)
-    assert not card.stream_record_button.isHidden()
+    assert card.findChild(QPushButton, "stream-record") is None  # (only in the data view)
     view = shell.show_data(instrument)
     assert not view.capture_controls.record_button.isHidden() and view.capture_controls.record_button.isEnabled()
 

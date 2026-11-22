@@ -59,6 +59,8 @@ class LocalSimulation:
         self._lock = threading.Lock()
         #: called in ngspice's thread with each point after the history took it (co-simulation)
         self.on_point: Callable[[float, dict], None] | None = None
+        #: values the co-simulation adds to each point (the nets it carries itself): time -> (names, values)
+        self.extra_point: Callable[[float], tuple[list, list]] | None = None
         #: extra preparation of the engine before the circuit is loaded (co-simulation)
         self.prepare: Callable[[ngspice.NgSpice], None] | None = None
         #: vectors needed at every point besides those kept (the nets of microcontroller pins)
@@ -192,6 +194,10 @@ class LocalSimulation:
             self._halting = False
 
     def _point(self, names: list[str], numbers: list) -> None:
+        if self.extra_point is not None and "time" in names:
+            now = numbers[names.index("time")]
+            more_names, more_values = self.extra_point(float(now.real if isinstance(now, complex) else now))
+            names, numbers = names + more_names, numbers + more_values
         self.history.append(names, numbers)
         if self.on_point is not None:
             self.on_point(self.history.last_time, self.history.latest())

@@ -12,7 +12,7 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from openscilab.core import capture_io, sigrok_session
-from openscilab.driver.models import AnalogChannel, AnalyzerChannel, CaptureSession, TriggerType
+from openscilab.driver.models import AnalogChannel, AnalyzerChannel, CaptureSession, EdgeKind, TriggerType
 from openscilab.driver.simulated import open_simulated
 
 
@@ -174,6 +174,13 @@ def test_clock_inputs_are_the_pins_that_can_clock(application):
         assert numbers == [8, 10, 13, 15]
         dialog.acquisition_box.setCurrentIndex(dialog.acquisition_box.findData("stream"))
         assert dialog.clock_box.isEnabled()  # STREAM_STATE
+        # the edge is an EdgeKind again (Qt hands back the bare str), so the settings can be saved
+        dialog.show()
+        dialog.clock_box.setChecked(True)
+        dialog.clock_edge_box.setCurrentIndex(dialog.clock_edge_box.findData(EdgeKind.FALLING))
+        session = dialog.build_session()
+        assert session.clock_edge is EdgeKind.FALLING
+        assert capture_io.session_to_dict(session, include_samples=False)["ClockEdge"] == "falling"
     finally:
         dialog.close()
 
@@ -253,7 +260,7 @@ def test_the_capture_dialog_of_the_rigol(application):
         assert dialog.pattern_radio.isHidden() and dialog.burst_box.isHidden()
         box = dialog.trigger_channel_box
         items = [box.itemText(index) for index in range(box.count())]
-        assert "External trigger" not in items and items[0] == "D0" and items[-1] == "CH4 (analog)"
+        assert "External trigger" not in items and items[0] == "Channel 1 · D0" and items[-1] == "CH4 (analog)"
         assert dialog.trigger_level_box.isHidden()
         dialog._set_all(False)
         dialog.analog_selectors[0].enabled = True
@@ -273,3 +280,41 @@ def test_the_capture_dialog_of_the_rigol(application):
     finally:
         dialog.close()
         driver.dispose()
+
+
+def test_channel_lists_show_the_pin_and_the_name(application):
+    """Trigger, clock and sequence lists name a channel by number, the device's pin and its name."""
+    from openscilab.core.profiles import fit_session, read_profiles_file
+    from openscilab.ui.dialogs.capture_dialog import CaptureDialog
+
+    driver = open_simulated("mega", fast=True).capture.driver
+    dialog = CaptureDialog(driver, persist=False)
+    try:
+        profile = read_profiles_file(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                  "examples", "profiles", "c64-arduino-mega.json"))[0]
+        dialog.apply_session(fit_session(profile.capture_settings, driver)[0])
+        assert dialog.clock_channel_box.currentText() == "Channel 31 · D2 · Φ2 (E)"
+        box = dialog.trigger_channel_box
+        texts = {box.itemData(item): box.itemText(item) for item in range(box.count())}
+        assert texts[8] == "Channel 9 · D53 · /RESET (C)"
+        assert texts[12] == "Channel 13 · D10"  # no name: number and pin
+        dialog.channel_selectors[12].enabled = True
+        dialog.channel_selectors[12].channel_name = "LED"  # a name typed: the lists follow
+        assert box.itemText(box.findData(12)) == "Channel 13 · D10 · LED"
+        stage = dialog.sequence_editor.stages[0]
+        assert stage.channel_combo.itemText(stage.channel_combo.findData(12)) == "Channel 13 · D10 · LED"
+        dialog.show()
+        session = dialog.build_session()
+        assert session.clock_name == "Φ2 (E)"
+    finally:
+        dialog.close()
+
+
+def test_the_trigger_summary_names_its_channel():
+    from openscilab.ui.widgets.quick_capture import trigger_summary
+
+    session = CaptureSession(frequency=1000, trigger_type=TriggerType.EDGE, trigger_channel=8)
+    session.capture_channels = [AnalyzerChannel(channel_number=8, channel_name="/RESET (C)")]
+    assert trigger_summary(session) == "Edge ↑ CH9 · /RESET (C)"
+    session.capture_channels[0].channel_name = ""
+    assert trigger_summary(session) == "Edge ↑ CH9"

@@ -16,7 +16,7 @@ import os
 import sys
 from typing import Optional, Sequence
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from . import __version__, qt_plugins
@@ -131,6 +131,8 @@ def _gui(argv: Sequence[str]) -> int:
         return 1
 
     application = QApplication(sys.argv[:1])
+    # menus are text: the menu bar, context menus and the menus of buttons (tool bars keep their icons)
+    application.setAttribute(Qt.AA_DontShowIconsInMenus, True)
     # an error nobody caught (a slot of Qt that failed, a thread): crash.log, a notice in the window
     notifier = CrashNotifier()
     crashes.install(notify=notifier.failed.emit)
@@ -139,7 +141,7 @@ def _gui(argv: Sequence[str]) -> int:
     # (without one it fell back to "dark" on Linux and to a helper program on macOS).
     from .ui.icons import app_icon
     from .ui.shell.main_window import ShellWindow
-    from .ui.theme import apply_font, apply_palette, build_stylesheet
+    from .ui.theme import apply_font, apply_palette, build_stylesheet, round_popups
 
     application.setApplicationName("openSciLab")
     application.setApplicationVersion(__version__)
@@ -149,6 +151,7 @@ def _gui(argv: Sequence[str]) -> int:
     apply_palette(application)
     apply_font(application)
     application.setStyleSheet(build_stylesheet())
+    round_popups(application)
 
     application.setWindowIcon(app_icon())
 

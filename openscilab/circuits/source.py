@@ -94,6 +94,8 @@ class HistorySource(Source):
         return low * self.scale, high * self.scale
 
     def describe(self) -> str:
+        if getattr(self, "net", ""):
+            return f"{self.net} of the circuit"
         return f"probe {self.vector} of the circuit"
 
 
@@ -307,6 +309,45 @@ def _instrument(rest: str, simulation, owned: bool, clock, fast: bool, seed: int
     instrument.add_facet(SimulationControl(driver))
     instrument.add_facet(CircuitRun(simulation, owned))
     return instrument
+
+
+def net_source(path: str, net: str, project: str | None = None) -> HistorySource:
+    """A net (or the probe of that name) of the circuit in ``path`` as the source of a channel of a simulated
+    device (scenario *Circuit*: a simulated logic analyzer at a circuit). It follows the circuit's run - the
+    one its document runs, else one started for it (shared, as ``circuit:`` devices share it)."""
+    resolved = resolve_path(path, project)
+    simulation = running.find(resolved) or running.find(path)
+    if simulation is None:
+        if not os.path.isfile(resolved):
+            raise CircuitError(f"there is no circuit {path!r} (neither running nor a file)")
+        simulation = _headless(resolved, fast=False)
+    if getattr(simulation, "headless", False):
+        running.retain(simulation)
+    circuit = simulation.circuit
+    probe = next((item for item in circuit.probes if item.name == net and item.vector != "0"), None)
+    if probe is not None:
+        vector = probe.vector
+    elif net in circuit.nets:
+        vector = circuit.vector_of_net(net)
+    else:
+        raise CircuitError(f"the circuit {os.path.basename(resolved)} has no net or probe {net!r}")
+    source = HistorySource(simulation, vector, circuit.vcc / 2)
+    source.net = net
+    source.owned = bool(getattr(simulation, "headless", False))
+    return source
+
+
+def release_net_source(source) -> None:
+    """A source of :func:`net_source` is no longer used: a run started for it stops with the last one."""
+    simulation = getattr(source, "simulation", None)
+    if simulation is None or not getattr(source, "owned", False):
+        return
+    source.owned = False
+    if running.release(simulation):
+        try:
+            simulation.stop()
+        finally:
+            running.unregister(simulation)
 
 
 def open_circuit_driver(rest: str):

@@ -228,6 +228,8 @@ class DeviceDocument(DocumentWidget):
     document_kind = "device"
 
     data_requested = Signal(object)
+    #: the data view of the instrument, with the capture setup while it has nothing captured yet
+    setup_requested = Signal(object)
     #: a device node for the instrument in a flow (the active one, else a new one)
     flow_requested = Signal(object)
     disconnect_requested = Signal(object)
@@ -237,8 +239,6 @@ class DeviceDocument(DocumentWidget):
     action_performed = Signal(object, str)
     #: record the monitor as a capture: (instrument, rate, pins, analog)
     record_requested = Signal(object)
-    #: *Record*: a stream of the device to the disk until it is stopped (into its data view)
-    stream_record_requested = Signal(object)
     #: *Update firmware* of the instrument
     firmware_requested = Signal(object)
     #: open an example of the library (``13-time/01-align-instruments``)
@@ -402,22 +402,13 @@ class DeviceDocument(DocumentWidget):
         set_icon(self.data_button, "channels")
         self.data_button.setToolTip("The data view of this device: set up the next capture, its captures, decoders "
                                     "and measurements (Run in the header captures)")
-        self.data_button.clicked.connect(lambda: self.data_requested.emit(self.instrument))
+        self.data_button.clicked.connect(lambda: self.setup_requested.emit(self.instrument))
         header.addWidget(self.data_button)
         self.flow_button = QPushButton("Use in a flow", self)
         set_icon(self.flow_button, "nodes")
         self.flow_button.setToolTip("Put this device into a flow: the open flow, or a new one")
         self.flow_button.clicked.connect(lambda: self.flow_requested.emit(self.instrument))
         header.addWidget(self.flow_button)
-        self.stream_record_button = QPushButton("Stream to disk", self)
-        self.stream_record_button.setObjectName("stream-record")
-        set_icon(self.stream_record_button, "record")
-        self.stream_record_button.setToolTip("Stream to the disk until Stop: everything is kept (as long as the disk "
-                                             "has room); the recording opens in the data view")
-        self.stream_record_button.clicked.connect(lambda: self.stream_record_requested.emit(self.instrument))
-        self.stream_record_button.setVisible(getattr(self, "controller", None) is not None
-                                             and self.controller.can_record())
-        header.addWidget(self.stream_record_button)
         # the device's own web page to control it live (the oscilloscope's Web Control), in the browser
         self.web_control_button = QPushButton("Web control", self)
         self.web_control_button.setObjectName("web-control")
@@ -526,7 +517,7 @@ class DeviceDocument(DocumentWidget):
         """Capture with this device: in its data view (the settings and the start are there)."""
         if self.controller is None:
             return False
-        self.data_requested.emit(self.instrument)
+        self.setup_requested.emit(self.instrument)
         return True
 
     def document_actions(self) -> list:
@@ -1502,9 +1493,6 @@ class DeviceDocument(DocumentWidget):
             subtitle.append(firmware.describe_firmware(driver.device_version))
         self.kind_label.setText("  ·  ".join(subtitle))
         self.data_button.setVisible(instrument.capture is not None)
-        controller = getattr(self, "controller", None)
-        self.stream_record_button.setVisible(controller is not None and controller.can_record())
-        self.stream_record_button.setEnabled(controller is not None and not controller.is_capturing)
         self.web_control_button.setVisible(driver is not None and CAPABILITY_WEB_CONTROL in driver.capabilities())
         self.action_firmware.setVisible(driver is not None and firmware.update_method(driver) is not None)
         connected = instrument in self.hub and instrument.status != InstrumentStatus.DISCONNECTED

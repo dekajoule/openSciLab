@@ -54,7 +54,9 @@ SETTING_TITLES = {"step": ("Time step", "s", "The time step of the live simulati
                                                   "runs switching circuits several times faster, a little less exact.")),
                   "speed": ("Speed", "", "Simulated seconds per second when it runs in real time (1: as fast as the clock)."),
                   "start": ("Start", "", ("settled: from its operating point (as if it ran for long); power on: every "
-                                          "capacitor empty, as the moment it is switched on (inrush, soft start)."))}
+                                          "capacitor empty, as the moment it is switched on (inrush, soft start).")),
+                  "logic_edge": ("Logic edge", "s", ("The rise and fall time of the outputs of logic gates: longer "
+                                                     "is faster (fewer steps), 1 ns as a 74HC gate."))}
 PARAM_TITLES = {"source": "Source", "start": "Start", "stop": "Stop", "step": "Step", "points": "Points per decade",
                 "scale": "Scale", "output": "Output net"}
 

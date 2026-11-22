@@ -23,7 +23,11 @@ AC/DC lab power supply: a set DC voltage, a set AC voltage or both, up to 230 V,
 and `COM`. The potentiometers `RV_DC` and `RV_AC` at a 5 V reference set them; two switching regulators
 (PWM) keep the rails 10 V beyond the peak the output needs, and a linear power amplifier on those rails
 makes the output exact and clean - its blocks in frames with their names and comments, every connection
-a wire.
+a wire. The W65C02 breadboard computer is the complete schematic of a 6502 computer to build (CPU, RAM,
+ROM, VIA, LCD, LEDs - its chips drawn in the order of their pins, every connection a wire: the address bus
+above the chips, the data bus below them) - and it runs: the CPU executes the program in its EEPROM, its
+bus traced by a logic analyzer (below, *A 6502 computer*); its clock module and its address decoder are
+circuits of their own as well.
 
 ## The editor
 
@@ -158,7 +162,8 @@ openSciLab's own components (`openscilab/circuits/library/*.yaml`) can all be si
 | Semiconductors | diode, Zener diode, LED (lights), bridge rectifier, NPN, PNP, N- and P-channel MOSFET |
 | Analog | operational amplifier, comparator, voltage regulator, 555 timer |
 | Switches | switch, push button, voltage-controlled switch (a power transistor with its driver) |
-| Logic | AND, NAND, OR, NOR, XOR, inverter, buffer, D flip-flop |
+| Logic | AND, NAND, OR, NOR, XOR, inverter, Schmitt-trigger inverter (74HC14: its two thresholds), buffer, D flip-flop |
+| Computer | W65C02S CPU, W65C22S VIA, 62256 SRAM, 28C256 EEPROM (its image: a `.bin` or `.hex` file), LCD 16×2 (HD44780) - emulated with the circuit, drawn in the order of their pins on the breadboard; crystal oscillator (a DIL-14 can) |
 | Connect, measure | ground, supply rail (with its voltage), terminal (a named output socket: OUT, COM ... - measured like a voltage probe), voltage, logic and current probe, oscilloscope, net labels |
 | Microcontrollers | Arduino Uno, Nano, Mega 2560 |
 | Devices | device input, device output (pins of connected devices, below) |
@@ -257,6 +262,37 @@ The **serial monitor** below the schematic shows what the firmware sends on its 
 Serial3 of a Mega with their name in front) and sends a line to it; *Reset* starts the firmware again
 as switched on - its pins drive nothing until the firmware sets them. A pin that is not connected gets
 no output stage (the simulation stays fast).
+
+## A 6502 computer
+
+The chips of the family *Computer* are emulated with the circuit, as the microcontrollers are
+(`circuits/mcu/bus_chips.py`), but bus cycle by bus cycle: the W65C02S (every opcode of the WDC data
+sheet with its cycles, interrupts, WAI and STP - checked with Klaus Dormann's 6502 and 65C02 test suites),
+the W65C22S (ports, timers T1 and T2 with their interrupt), the 62256 SRAM, the 28C256 EEPROM - its
+*Image* is the file a programmer writes into it: a 32 KB binary (a larger one: its last 32 KB, a 64 KB
+image of the whole address space) or Intel HEX - and the HD44780 display: while the circuit runs, the
+window of its symbol shows its two lines of 16 characters (the serial monitor what it showed). A chip answers what its pins read after its delays (the CPU drives the address 400 ns after the
+falling edge of PHI2 and holds a write 300 ns past it, the EEPROM answers 150 ns after its address); the
+CPU starts on its own when RESB is high at power on, a reset is RESB low. Real gates between them - the
+decoder of 74HC00 gates, the clock - are the circuit's.
+
+Nets that only chips connect (the data bus, most of the address bus, R/W) are carried by the
+co-simulation as levels, not by ngspice: an edge there costs no solver steps. The nets that reach
+other parts (the decoder's inputs, the LEDs) get output stages whose levels ramp in 2 µs. So the computer
+runs at some 50 to 100 cycles a second of computing time - a clock of 10 kHz (the example's) is
+simulated some hundred times slower than real time, as a slowed breadboard computer; the setting
+*Logic edge* (the rise time of logic gates, `logic_edge`) of 100 ns and a *Tolerance* of 0.05 keep the
+steps few.
+
+Logic probes on its nets are channels of the `circuit:` device: the data view captures them, the C64
+bus decoder (CPU *W65C02S*, map *Ben Eater 6502 without ACIA*, its input SYNC on the CPU's SYNC)
+disassembles the program - the example's flow `trace.flow.yaml` does. As on the breadboard, an Arduino
+Mega can be the logic analyzer: a simulated one (*Simulated device… → Arduino Mega 2560*, or
+`arduino-sim:mega`) with the signals scenario *Circuit* - the circuit file, the wiring *Arduino Mega
+(Ben Eater)*: the address bus on D22-D52, the data bus on D31-D45, PHI2 on D2, R/W on D3, /RES on
+D53, SYNC on D47 - shows the running circuit on its pins and takes its time; the profile *W65C02
+breadboard computer - Arduino Mega 2560 (Ben Eater's wiring)* captures a state per falling edge of
+PHI2 with the buses Address and Data and the decoder.
 
 ## The file
 

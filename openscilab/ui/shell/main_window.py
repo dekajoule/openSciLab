@@ -499,6 +499,7 @@ class ShellWindow(QMainWindow):
         bar.setIconSize(QSize(icon_px(14), icon_px(14)))
         self.logo = self._logo(bar)
         self.palette_button = QPushButton(f"Search commands...   {native('Ctrl+K')}", bar)
+        self.palette_button.setObjectName("search-field")
         set_icon(self.palette_button, "search")
         self.palette_button.setToolTip(f"Every command, open document and recent file, by name ({native('Ctrl+K')})")
         self.palette_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -525,8 +526,9 @@ class ShellWindow(QMainWindow):
         # how the time of the active flow or panel passes: two halves of one switch
         self.time_switch = QWidget(bar)
         self.time_switch.setObjectName("segmented")
+        self.time_switch.setAttribute(Qt.WA_StyledBackground)  # (its track)
         time_layout = QHBoxLayout(self.time_switch)
-        time_layout.setContentsMargins(0, 0, 0, 0)
+        time_layout.setContentsMargins(2, 2, 2, 2)
         time_layout.setSpacing(0)
         self.real_time_button = QToolButton(self.time_switch)
         self.real_time_button.setText("Real time")
@@ -590,7 +592,7 @@ class ShellWindow(QMainWindow):
         self.port_timer.start()
         self.devices_section.instrument_activated.connect(self.open_device_card)
         self.devices_section.entry_activated.connect(self.connect_entry)
-        self.devices_section.data_requested.connect(self.show_data)
+        self.devices_section.data_requested.connect(lambda instrument: self.show_data(instrument, setup=True))
         self.devices_section.disconnect_requested.connect(self.disconnect_instrument)
         self.devices_section.disconnect_all_requested.connect(self.disconnect_all)
         self.sidebar.add_section("devices", "Devices", self.devices_section)
@@ -1811,12 +1813,12 @@ class ShellWindow(QMainWindow):
             return document
         document = DeviceDocument(instrument, self.hub, controller=self.capture_controller(instrument))
         document.data_requested.connect(self.show_data)
+        document.setup_requested.connect(lambda instrument: self.show_data(instrument, setup=True))
         document.flow_requested.connect(self.add_instrument_to_flow)
         document.disconnect_requested.connect(self.disconnect_instrument)
         document.reconnect_requested.connect(self.reconnect_instrument)
         document.action_performed.connect(self.mark_action)
         document.record_requested.connect(self.record_monitor)
-        document.stream_record_requested.connect(self.record_stream)
         document.stimulus_requested.connect(self.stimulus_and_capture)
         document.firmware_requested.connect(self.update_device_firmware)
         document.example_requested.connect(self.open_example)
@@ -1917,7 +1919,7 @@ class ShellWindow(QMainWindow):
         return True
 
     def record_stream(self, instrument: Instrument) -> bool:
-        """*Record* of a device card: a stream to the disk until it is stopped, in the device's data view."""
+        """A stream of ``instrument`` to the disk until it is stopped, in the device's data view."""
         controller = self.capture_controller(instrument)
         if controller is None:
             return False
@@ -1938,10 +1940,21 @@ class ShellWindow(QMainWindow):
             card.sync_monitor()
         return document
 
-    def show_data(self, instrument: Instrument, beside: bool = False) -> DataView:
+    def show_data(self, instrument: Instrument, beside: bool = False, setup: bool = False) -> DataView:
         """The data view of ``instrument``'s captures (a new one when no view shows them).
         ``beside``: a capture started on the device card, whose data view opens next to the card
-        (both stay visible) and the card keeps the focus."""
+        (both stay visible) and the card keeps the focus. ``setup``: a view without a capture opens
+        the capture setup (instead of showing that there is no data)."""
+        document = self._show_data(instrument, beside)
+        controller = self.capture_controller(instrument)
+        if setup and controller is not None and document.source is controller and \
+                document.model.session is None and not controller.is_capturing:
+            # (after the view is shown: the setup is a dialog over it)
+            QTimer.singleShot(0, document, lambda: document.model.session is None and not controller.is_capturing
+                              and document.source is controller and document.capture_controls.capture_settings())
+        return document
+
+    def _show_data(self, instrument: Instrument, beside: bool) -> DataView:
         controller = self.capture_controller(instrument)
         view = controller.view if controller is not None else None
         if view is not None and view in self.area.documents():
@@ -2214,8 +2227,8 @@ class ShellWindow(QMainWindow):
         return build_stylesheet() + shell_stylesheet()
 
     def _fill_header_tools(self) -> None:
-        """The header's entries: the logo, the search, *New* (flow, panel, data view, waveform,
-        project – in the order of File → New), Open, Save and the examples; Run, Pause, Stop and the
+        """The header's entries: the logo, the search, a button for each *New* (flow, panel, data view,
+        waveform, project – in the order of File → New), Open, Save and the examples; Run, Pause, Stop and the
         time of the run. It adapts to the width of the window and is customized with a right click
         (``ui/widgets/toolbar.py``)."""
         from ..widgets.toolbar import HIGH, NORMAL
@@ -2237,13 +2250,24 @@ class ShellWindow(QMainWindow):
                 button.clicked.connect(lambda _checked=False: action.trigger())
             return button
 
-        new = native(QKeySequence(QKeySequence.New).toString())
-        # New: one button, its menu is File → New (flow, panel, data view, waveform, project)
-        self.new_tool = tool("New", "plus", f"A new flow, panel, data view, waveform or project (a flow: {new})",
-                             menu=self.new_menu)
-        self.new_tool.setPopupMode(QToolButton.MenuButtonPopup)
-        self.new_tool.clicked.connect(lambda _checked=False: self.action_new_flow.trigger())
-        self.new_tool.setToolTip(f"A new flow ({new}); the arrow: a panel, data view, waveform or project")
+        # New: a button for each entry of File → New, in its order (flow, panel, data view, waveform, the
+        # kinds of plugins, project)
+        self.new_label = QLabel("New", bar)
+        set_role(self.new_label, "hint")
+        self.new_tools: dict[str, QToolButton] = {}
+        for action in self.new_menu.actions():
+            if action.isSeparator():
+                continue
+            text = action.text().replace("&", "")
+            title = "Project..." if action is self.action_new_project else text
+            if action is self.action_new_project:
+                tip = "A new project from an example"
+            else:  # (a plugin's kind of document says what it is)
+                tip = action.toolTip() if action.toolTip() not in (text, action.text()) else f"A new {text.lower()}"
+            if not action.shortcut().isEmpty():
+                tip += f" ({native(action.shortcut().toString())})"
+            button = self.new_tools[title.rstrip(".")] = tool(title, "plus", tip, action=action)
+            button.setIcon(action.icon())
         self.open_tool = tool("Open", "folder", f"Open a file ({native('Ctrl+O')})", action=self.action_open)
         self.save_tool = tool("Save", "save", f"Save ({native('Ctrl+S')})", action=self.action_save)
         self.examples_tool = tool("Examples", "book", "Start from an example project (each runs with simulators)",
@@ -2251,7 +2275,10 @@ class ShellWindow(QMainWindow):
         bar.add_widget("logo", self.logo, "Logo", "logo", HIGH, pinned=True)
         # the search right after the logo: the first place to look for anything
         bar.add_widget("search", self.palette_button, "Search commands", "search", HIGH)
-        bar.add_widget("new", self.new_tool, "New", "file", HIGH)
+        bar.add_widget("new", self.new_label, "New", "new", HIGH, pinned=True)
+        for index, (text, button) in enumerate(self.new_tools.items()):
+            bar.add_widget(f"new-{text.lower().replace(' ', '-')}", button, f"New {text.lower()}", "new",
+                           HIGH if index < 3 else NORMAL)
         bar.add_widget("open", self.open_tool, "Open a file", "file", HIGH, text=False)
         bar.add_widget("save", self.save_tool, "Save", "file", HIGH, text=False)
         bar.add_widget("examples", self.examples_tool, "Examples", "file", NORMAL)

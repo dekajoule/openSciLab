@@ -179,3 +179,47 @@ def test_c64_states_match_the_bus_cycles_of_the_decoder():
         assert (value("A", 16, index), value("D", 8, index)) == (address, data)
         checked += 1
     assert checked > 100
+
+
+@pytest.mark.skipif(not os.path.isfile(DEMO), reason="the demo capture is missing")
+def test_the_c64_decoder_disassembles_a_state_capture_without_its_clock():
+    """A state capture (as the Arduino Mega takes it) has no Φ2 channel: every state is a Φ2 edge.
+    Assigned to the clock, the decoder still finds the instructions of the timing capture."""
+    from openscilab.core import capture_io
+    from openscilab.core.profiles import read_profiles_file
+    from openscilab.core.state_mode import state_clock, suggest_sampling
+    from openscilab.sigrok import worker
+    from openscilab.sigrok.engine import DecoderRegistry
+    from openscilab.sigrok.provider import SigrokProvider
+
+    session = capture_io.load_capture(DEMO).session
+    registry = DecoderRegistry()
+    registry.load()
+    provider = SigrokProvider(registry)
+    provider.load_configuration(read_profiles_file(DEMO.replace("c64-demo.lac", os.path.join("profiles", "c64-logicanalyzer-v2.json")))[0].decoder_configuration)
+    provider.instances =[instance for instance in provider.instances if instance.decoder_id == "c64bus"]
+
+    def instructions(groups):
+        (group,) = groups
+        rows = {row.name: row.segments for row in group.annotations}
+        return [segment for segment in rows["Disassembly"] if segment.type_id == 5], rows
+
+    timing, _rows = instructions(provider.run(session))
+    clock = next(channel.channel_number for channel in session.capture_channels
+                 if channel.channel_name.startswith("Φ2"))
+    suggestion = suggest_sampling(session, clock)
+    state = resample_on_clock(session, clock, suggestion.edge, suggestion.delay).session
+    state.clock_name = "Φ2 (E)"
+    assert state_clock(state).channel_number == clock and state_clock(state).channel_name == "Φ2 (E)"
+
+    states, rows = instructions(worker.run(provider, state))
+    assert len(timing) > 100 and [s.values for s in states[:500]] == [s.values for s in timing[:500]]
+    assert not rows.get("Warnings")  # the bus is stable at every read point
+    count = state.sample_count()
+    assert all(0 <= s.first_sample <= s.last_sample <= count for s in states)
+
+    # Φ2 captured, too (as the Mega profile does): its samples at the edges show no edge, the decoder
+    # still decodes on the clock
+    kept = resample_on_clock(session, clock, suggestion.edge, suggestion.delay, keep_clock=True).session
+    states, rows = instructions(worker.run(provider, kept))
+    assert [s.values for s in states[:500]] == [s.values for s in timing[:500]] and not rows.get("Warnings")

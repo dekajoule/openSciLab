@@ -1207,7 +1207,10 @@ class CircuitDocument(DocumentWidget):
         missing = []
         if not engines.available():
             missing.append(("ngspice", "ngspice, the circuit simulator"))
+        from ...circuits.mcu.boards import emulator_of
+
         if any((self.spec(component.type) or ComponentSpec("", "")).role == "mcu"
+               and emulator_of((self.spec(component.type) or ComponentSpec("", "")).board) == "simavr"
                for component in self.schematic.components.values()):
             from ...circuits.mcu import avr
 
@@ -1414,6 +1417,9 @@ class CircuitDocument(DocumentWidget):
         finally:
             running.unregister(simulation)
         self.scene.set_live({}, {}, {})
+        for shown in self.scene.components.values():  # (nor the displays)
+            if getattr(shown, "display_lines", None):
+                shown.set_display([])
         for ref, panel in self.scopes.items():  # (the screens show nothing of a run that is over)
             panel.clear()
             item = self.scene.components.get(ref)
@@ -1498,6 +1504,10 @@ class CircuitDocument(DocumentWidget):
                     if item.get(f"serial{uart}"):
                         self.serial.append(ref, item[f"serial{uart}"], uart)
                 self.serial.set_state(f"{ref}: {item.get('state', '')}, {values.format_value(item.get('time', 0.0), 's', 4)}")
+                if "display" in item:  # (a character display shows what it got)
+                    shown = self.scene.components.get(ref)
+                    if shown is not None:
+                        shown.set_display(item["display"])
         if self.stack.currentWidget() is self.results:
             series = {}
             for probe in circuit.probes:

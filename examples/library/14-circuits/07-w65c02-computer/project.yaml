@@ -1,0 +1,15 @@
+project: W65C02 breadboard computer
+description: 'A 6502 computer to build on breadboards - and simulated whole: the W65C02S runs the program in its
+  EEPROM (firmware/hello.bin, assembled from hello.s): "Hello, world!" on the LCD (the serial monitor shows it),
+  then the four LEDs count. Its chips are emulated bus cycle by bus cycle between the real decoder gates, clock
+  and LEDs of the schematic; the probes LA1-LA34 are a logic analyzer''s - the flow traces and disassembles the
+  bus, and a simulated Arduino Mega (signals scenario Circuit, profile "W65C02 breadboard computer - Arduino
+  Mega 2560") traces it as on the breadboard. The clock module and the address decoder are circuits of their
+  own as well.'
+open:
+- circuits/computer.circuit.yaml
+- flows/trace.flow.yaml
+- circuits/clock.circuit.yaml
+- circuits/decoder.circuit.yaml
+- flows/clock.flow.yaml
+- flows/decoder.flow.yaml

@@ -55,18 +55,90 @@ def test_status_dots_are_sharp():
     assert status_icon(InstrumentStatus.CONNECTED).availableSizes()[0].width() >= 40
 
 
-def test_the_capture_settings_have_pages_and_show_where_a_problem_is(shell):
+def test_the_capture_settings_are_one_page_and_show_where_a_problem_is(shell):
+    from PySide6.QtWidgets import QGroupBox
+
     from openscilab.ui.dialogs.capture_dialog import CaptureDialog
 
     instrument = open_simulated("free")
     dialog = CaptureDialog(instrument.capture.driver, shell)
-    assert [dialog.page_list.item(row).text() for row in range(dialog.page_list.count())] == [
-        "Sampling", "Channels", "Trigger"]
+    page = dialog.page_scroll.widget()
+    groups = [page.layout().itemAt(index).widget() for index in range(page.layout().count())]
+    assert [group.title() for group in groups if isinstance(group, QGroupBox)] == ["Sampling", "Trigger", "Channels"]
     for selector in dialog.channel_selectors:
         selector.enabled = False
-    dialog.page_list.setCurrentRow(2)
+    dialog.resize(900, 360)  # (the page scrolls)
+    dialog.show()
+    bar = dialog.page_scroll.verticalScrollBar()
+    bar.setValue(0)
     assert dialog.build_session() is None  # no channel
-    assert dialog.page_list.currentRow() == 1 and "channel" in dialog.validation_label.text().lower()
+    assert bar.value() > 0 and "channel" in dialog.validation_label.text().lower()  # scrolled to the channels
     dialog._update_overview()
     assert dialog.overview_label.text().startswith("0 channels")
+    dialog.reject()
+
+
+def test_the_capture_setup_draws_its_capture_on_a_time_line(shell):
+    from openscilab.ui.dialogs.capture_dialog import CaptureDialog
+
+    dialog = CaptureDialog(open_simulated("free").capture.driver, shell)
+    dialog.frequency_box.setValue(10_000)
+    dialog.edge_radio.setChecked(True)
+    dialog.pre_samples_box.setValue(500)
+    dialog.post_samples_box.setValue(2000)
+    plan = dialog.timeline.plan
+    assert (plan.pre, plan.post, plan.start) == (500, 2000, "trigger")
+    assert dialog.timeline.accessibleDescription() == (
+        "before: 500 samples · 50 ms, Trigger, after: 2,000 samples · 200 ms")
+    dialog.burst_box.setChecked(True)
+    dialog.burst_count_box.setValue(3)
+    assert "3 bursts × 2,000 samples" in dialog.timeline.description()
+    dialog.immediate_radio.setChecked(True)  # no trigger: nothing before the start
+    assert dialog.timeline.plan.pre == 0 and dialog.timeline.description().startswith("Start, after:")
+    dialog.timeline.resize(600, dialog.timeline.sizeHint().height())
+    assert not dialog.timeline.grab().isNull()
+    dialog.reject()
+
+
+def test_the_capture_is_set_on_the_time_line_within_what_the_device_captures(shell):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtTest import QTest
+
+    from openscilab.ui.dialogs.capture_dialog import CaptureDialog
+    from openscilab.ui.widgets.capture_timeline import nice_count, step_count
+
+    assert [step_count(1000, 1), step_count(1000, -1), step_count(2000, 2), step_count(1, -1)] == [2000, 500, 10000, 1]
+    assert nice_count(1040) == 1000 and nice_count(1400) == 1500
+
+    dialog = CaptureDialog(open_simulated("free").capture.driver, shell)
+    dialog.edge_radio.setChecked(True)
+    total = dialog.limits.max_total_samples
+    dialog.pre_samples_box.setValue(1000)
+    dialog.post_samples_box.setValue(total)  # more than fits: only what does
+    assert dialog.post_samples_box.value() == total - 1000
+    dialog.burst_box.setChecked(True)
+    dialog.burst_count_box.setValue(4)
+    assert dialog.post_samples_box.value() == (total - 1000) // 4
+    dialog.burst_box.setChecked(False)
+    assert dialog.build_session() is not None
+
+    dialog.pre_samples_box.setValue(1000)
+    dialog.post_samples_box.setValue(3000)
+    timeline = dialog.timeline
+    timeline.resize(800, timeline.sizeHint().height())
+    assert timeline.plan.movable and timeline.plan.resizable
+    bar = timeline._bar()
+    middle = QPoint(int(bar.center().x()), int(bar.center().y()))
+    QTest.mouseClick(timeline, Qt.LeftButton, Qt.NoModifier, middle)  # the trigger in the middle
+    assert (dialog.pre_samples_box.value(), dialog.post_samples_box.value()) == (2000, 2000)
+    timeline.setFocus()
+    QTest.keyClick(timeline, Qt.Key_Up)  # longer, the trigger stays in the middle
+    assert (dialog.pre_samples_box.value(), dialog.post_samples_box.value()) == (2500, 2500)  # (4000 → 5000)
+    QTest.keyClick(timeline, Qt.Key_Left)
+    assert dialog.pre_samples_box.value() == 2450
+
+    dialog.immediate_radio.setChecked(True)  # without a trigger nothing comes before it
+    assert not timeline.plan.movable
+    timeline._request(0.5, 4000)
+    assert dialog.post_samples_box.value() == 4000
     dialog.reject()

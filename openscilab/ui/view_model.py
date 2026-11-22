@@ -465,6 +465,19 @@ class CaptureViewModel(QObject):
         self.capture_changed.emit()
         return True
 
+    def move_analog_channel(self, channel: AnalogChannel, index: int) -> bool:
+        """Show the analog ``channel`` at ``index`` among the analog channels (saved with the capture)."""
+        if self._session is None or channel not in self._session.analog_channels:
+            return False
+        channels = self._session.analog_channels
+        old = channels.index(channel)
+        index = max(0, min(int(index), len(channels) - 1))
+        if index == old:
+            return False
+        channels.insert(index, channels.pop(old))
+        self.channels_changed.emit()
+        return True
+
     def notify_capture_changed(self) -> None:
         self.capture_changed.emit()
 

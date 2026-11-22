@@ -261,7 +261,8 @@ Rq in gnd 100k
 .ends REG_LINEAR
 
 * ------------------------------------------------------------------- 555 timer
-* pins: VCC GND TRIG THR DIS CV RESET OUT; trigger wins over threshold, reset over both
+* pins: VCC GND TRIG THR DIS CV RESET OUT; trigger wins over threshold, reset over both; the latch holds a
+* full level (a level between, caught by a long time step, would stay: the output stuck half way)
 .subckt NE555 vcc gnd trig thr dis cv rst out
 R1 vcc cv 5k
 R2 cv lo 5k
@@ -269,7 +270,7 @@ R3 lo gnd 5k
 Bs s 0 V = 0.5*(1+tanh((V(lo)-V(trig))*400))
 Br r 0 V = 0.5*(1+tanh((V(thr)-V(cv))*400))
 Brr rr 0 V = 0.5*(1-tanh((V(rst,gnd)-0.7)*40))
-Bq qn 0 V = V(rr) > 0.5 ? 0 : (V(s) > 0.5 ? 1 : (V(r) > 0.5 ? 0 : V(q)))
+Bq qn 0 V = V(rr) > 0.5 ? 0 : (V(s) > 0.5 ? 1 : (V(r) > 0.5 ? 0 : (V(q) > 0.5 ? 1 : 0)))
 Rq qn q 1k
 Cq q 0 20p
 Bout o1 gnd V = V(q)*max(V(vcc,gnd)-1.7, 0) + (1-V(q))*0.1

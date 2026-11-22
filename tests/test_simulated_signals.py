@@ -81,6 +81,35 @@ def test_uart_on_a_channel_and_nothing_else():
     assert bits == [0, 0, 0, 0, 1, 0, 0, 1, 0, 1]
 
 
+def test_the_defaults_of_a_scenario_fit_the_rate_of_the_device():
+    """A counter, SPI, I²C or UART of the defaults is slow enough for the device to capture it (ten
+    samples a step at its highest rate): a counter of 1 MHz on an Arduino (100 kHz) never toggled
+    its lowest bit in a capture, so its edge trigger never fired."""
+    expected = {"uno": ("10 kHz", 9600), "daq": ("5 kHz", 4800), "uno_r4": ("100 kHz", 57600),
+                "pico": ("1 MHz", 115200)}
+    for profile, (rate, baud) in expected.items():
+        instrument = open_simulated(profile)
+        simulation = instrument.simulation
+        assert simulation.scenario_defaults("counter") == {"frequency": rate}
+        assert simulation.scenario_defaults("uart")["baud"] == baud
+        assert simulation.scenario_defaults("spi")["frequency"] == rate
+        config, _names = simulation.apply_signals({"scenario": "protocols"})
+        assert (config["frequency"], config["baud"]) == (rate, baud)
+        assert simulation.apply_signals({"scenario": "counter", "frequency": "1 MHz"})[0]["frequency"] == "1 MHz"
+        instrument.close()
+    # the counter of the defaults at the highest rate of an Uno: its lowest bit triggers
+    instrument = open_simulated("uno")
+    instrument.simulation.apply_signals({"scenario": "counter"})
+    driver = instrument.capture.driver
+    session = CaptureSession(frequency=driver.max_frequency, pre_trigger_samples=50, post_trigger_samples=150)
+    session.capture_channels = [AnalyzerChannel(channel_number=number) for number in range(9)]
+    session.trigger_type, session.trigger_channel, session.trigger_inverted = TriggerType.EDGE, 0, True
+    done = threading.Event()
+    assert driver.start_capture(session, lambda args: done.set()) == CaptureError.NONE
+    assert done.wait(5)
+    instrument.close()
+
+
 def test_a_single_channel_gets_its_own_signal_and_wiring_stays():
     instrument = open_simulated("uno", fast=True)
     driver = instrument.simulated_driver

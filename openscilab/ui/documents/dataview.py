@@ -638,16 +638,11 @@ class DataView(QWidget, Document):
         card_layout.setContentsMargins(28, 24, 28, 24)
         card_layout.setSpacing(10)
 
-        title = QLabel("No data", card)
-        set_role(title, "title")
-        card_layout.addWidget(title)
-        card_layout.addWidget(
-            hint(
-                "A data view shows captures: capture with a device (Run in the header, or a flow), "
-                "open a saved capture, or compute simulated signals.",
-                card,
-            )
-        )
+        self.empty_title = QLabel("No data", card)
+        set_role(self.empty_title, "title")
+        card_layout.addWidget(self.empty_title)
+        self.empty_hint = hint("", card)
+        card_layout.addWidget(self.empty_hint)
         card_layout.addSpacing(6)
 
         # two lines of buttons: the empty page fits beside a device card
@@ -1752,6 +1747,14 @@ class DataView(QWidget, Document):
             return
         self.notify(f"Exported {path}", 5000)
 
+    @property
+    def captured_session(self) -> Optional[CaptureSession]:
+        """The capture as the device made it: while a state analysis is shown, the timing capture
+        its states were made of (the settings of a repeated capture)."""
+        if self._timing_capture is not None:
+            return self._timing_capture[0]
+        return self.model.session
+
     def back_to_timing(self) -> None:
         """Returns from a state analysis to the capture it was made of."""
         if self._timing_capture is None:
@@ -1774,8 +1777,10 @@ class DataView(QWidget, Document):
         if not dialog.exec() or dialog.result_capture is None:
             return
         state = dialog.result_capture
-        # The states are a capture of their own; a repeated capture uses the device's timing again
-        state.session.clock_channel = None
+        # The states keep their clock (decoders that wait for its edges get it drawn in, as in a
+        # state capture of a device); a repeated capture uses the timing capture (captured_session).
+        state.session.clock_name = next((channel.channel_name for channel in session.capture_channels
+                                         if channel.channel_number == dialog.clock_channel), "")
         # Kept until another capture is loaded, for Back to the timing capture
         timing = (session, self.model.regions, self.current_file)
         self.current_file = None
@@ -2834,14 +2839,25 @@ class DataView(QWidget, Document):
         if not self.model.is_live:
             self.view_toolbar.set_available("roll", False)
         self.empty_primary_button.setEnabled(not capturing)
-        # with a device: its card (where captures start), else the device list
-        self.empty_primary_button.setText("Open the device" if self.source is not None else "Devices...")
+        # with a device: its capture setup, else the device list
+        if self.source is not None:
+            self.empty_title.setText("Nothing captured yet")
+            self.empty_hint.setText(f"Set up the capture with {self.source.instrument.name} (channels, rate, "
+                                    "trigger) and capture, or Run in the header captures with the current setup.")
+            self.empty_primary_button.setText("Capture setup...")
+            set_icon(self.empty_primary_button, "gear")
+        else:
+            self.empty_title.setText("No data")
+            self.empty_hint.setText("A data view shows captures: capture with a device (Run in the header, or a "
+                                    "flow), open a saved capture, or compute simulated signals.")
+            self.empty_primary_button.setText("Devices...")
+            set_icon(self.empty_primary_button, "devices")
         self.capture_stack.setCurrentIndex(1 if self.model.session is not None else 0)
         self._update_source_label()
 
     def _empty_page_primary_action(self) -> None:
         if self.source is not None:
-            self.device_card_requested.emit(self.source.instrument)
+            self.capture_controls.capture_settings()
         else:
             self.devices_requested.emit()
 

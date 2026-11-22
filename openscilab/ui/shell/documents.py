@@ -44,9 +44,8 @@ TEAR_OFF = 40
 
 
 class DocumentTabBar(QTabBar):
-    """The tab bar of a group: a tab dragged off the bar asks for a window of its own (``torn_off``
-    with its index); a double click does nothing (it was too easy to do by accident – the tab's
-    menu has *Open in a new window*)."""
+    """The tab bar of a group: a tab dragged off the bar or double-clicked asks for a window of its
+    own (``torn_off`` with its index); a single click only shows it."""
 
     torn_off = Signal(int)
 
@@ -74,6 +73,14 @@ class DocumentTabBar(QTabBar):
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt naming
         self._pressed = None
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        index = self.tabAt(event.position().toPoint())
+        if event.button() == Qt.LeftButton and index >= 0:
+            self._pressed = None
+            QTimer.singleShot(0, lambda: self.torn_off.emit(index))
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 class DocumentGroup(QTabWidget):

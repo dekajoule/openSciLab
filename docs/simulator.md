@@ -46,7 +46,14 @@ card puts something else on them, at once and also while a capture runs:
 | *Counter* (`counter`) | an 8 bit counter on the first channels, its clock on the next |
 | *C64 bus* (`c64`) | a Commodore 64 at its expansion port running a small program (reset, a loop, two interrupts) on the channels of the profile *C64 expansion port - LogicAnalyzer V2: board B (master) + board A (slave)*; needs 48 channels, i.e. `sim:pico*2` |
 | *Capture file* (`file`) | the channels of a capture (`path`), played at its rate and repeated |
+| *Circuit* (`circuit`) | the nets of a running circuit (`path`, Circuits) on the pins a logic analyzer is wired to them with (`wiring`: *Arduino Mega (Ben Eater)* - the W65C02 breadboard computer's address bus on D22-D52, data bus on D31-D45, PHI2 on D2, R/W on D3); the device takes the circuit's time ([circuits.md](circuits.md#a-6502-computer)) |
 | *Nothing connected* (`idle`) | every channel low |
+
+The rates of a scenario (count rate, step rate of SPI and I²C, baud rate) start at what the device
+can capture: at most a tenth of its highest rate, 1-2-5 rounded (a standard baud rate), and no more
+than 1 MHz and 115200 Bd - an Arduino Uno or Mega (100 kHz) counts at 10 kHz and sends at 9600 Bd,
+a Pico at 1 MHz and 115200 Bd. A faster signal is typed in; captured too slowly, it aliases (a counter
+of 1 MHz sampled at 1 kHz shows its lowest bits standing still, an edge trigger on them never fires).
 
 A double-click on a channel gives that channel a signal of its own (any source of the table
 below, e.g. `square` with `frequency: 2 kHz`); *Name the channels after their signals* names them

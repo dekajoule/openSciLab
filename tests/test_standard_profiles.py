@@ -159,14 +159,20 @@ def test_the_c64_profiles_say_the_device_they_are_for():
     names = [profile.name for name in ("c64-logicanalyzer-v2", "c64-arduino-mega")
              for profile in read_profiles_file(os.path.join(standard_directory(), name + ".json"))]
     assert all("LogicAnalyzer V2" in name for name in names[:2]) and "Arduino Mega 2560" in names[2]
-    # the Mega: Ben Eater's pins, a state per falling edge of Φ2 (D2), address and data as buses
+    # the Mega: after Ben Eater's monitor, a state per falling edge of Φ2 (D2), address and data as buses
     mega = standard("c64-arduino-mega").capture_settings
     named = {channel.channel_name: channel.channel_number for channel in mega.capture_channels}
     assert mega.clock_channel == 30 and mega.clock_edge == EdgeKind.FALLING  # D2
     assert mega.clock_name == "Φ2 (E)"  # the clock is no channel of the capture: named on its own
-    assert named["A15 (F)"] == 0 and named["A0 (Y)"] == 9 and named["D7 (14)"] == 42 and named["D0 (21)"] == 8
+    assert named["A0 (Y)"] == 0 and named["A15 (F)"] == 9  # D22, D52
+    assert named["D0 (21)"] == 22 and named["D7 (14)"] == 64  # D31, D45
+    assert named["R/W (5)"] == 31 and named["/RESET (C)"] == 8  # D3, D53
     assert [bus.name for bus in mega.buses] == ["Address", "Data"]
     assert mega.buses[0].channels == [named[f"A{bit} ({pin})"] for bit, pin in enumerate("YXWVUTSRPNMLKJHF")]
+    # the C64 bus decoder: Φ2 on the clock, which is no channel of the capture (each state is an edge)
+    (decoder,) = standard("c64-arduino-mega").decoder_configuration
+    assert decoder["decoder_id"] == "c64bus" and decoder["channel_map"]["24"] == 30
+    assert decoder["channel_map"]["25"] == named["R/W (5)"] and decoder["channel_map"]["0"] == named["A0 (Y)"]
 
 
 def test_a_profile_needs_the_channels_it_captures():
@@ -246,13 +252,19 @@ def test_channels_on_high_numbers_are_renumbered_onto_the_device():
 def test_the_state_clock_and_buses_follow_the_renumbering():
     mega = standard("c64-arduino-mega")
     session = mega.capture_settings
+    # the profile captures Φ2 (D2, channel 30) too: the clock follows its channel
+    assert "needs 27 channels" in profile_problem(mega, _Device(24))
+    fitted, _decoders, _changes = fit_profile(mega, _Device(40))
+    assert [c.channel_number for c in fitted.capture_channels] == list(range(27))
+    assert fitted.capture_channels[fitted.clock_channel].channel_name == "Φ2 (E)"
+    # a clock that is not captured: its own channel after the data channels
+    session.capture_channels = [c for c in session.capture_channels if c.channel_number != session.clock_channel]
     old = [c.channel_number for c in session.capture_channels]
-    # 36 data channels and the clock (channel 30, not among the data) need 37 channels
-    assert "needs 37 channels" in profile_problem(mega, _Device(24))
+    assert "needs 27 channels" in profile_problem(mega, _Device(24))  # 26 data channels and the clock
     fitted, decoders, changes = fit_profile(mega, _Device(40))
     new = [c.channel_number for c in fitted.capture_channels]
-    assert new == list(range(36))  # the data channels, dense and in order
-    assert fitted.clock_channel == 36  # the clock after them, still its own channel
+    assert new == list(range(26))  # the data channels, dense and in order
+    assert fitted.clock_channel == 26  # the clock after them, still its own channel
     mapping = {old[i]: new[i] for i in range(len(new))}
     for before, after in zip(session.buses, fitted.buses):
         assert after.channels == [mapping[channel] for channel in before.channels]
@@ -315,7 +327,7 @@ def test_the_standard_profiles_menu_loads_and_disables(make_dataview):
         c64 = next(action for text, action in entries.items() if "LogicAnalyzer V2: board B (master)" in text)
         assert not c64.isEnabled() and "needs 39 channels" in c64.text()
         mega = next(action for text, action in entries.items() if "Arduino Mega" in text)
-        assert not mega.isEnabled() and "needs 37 channels" in mega.text()  # 36 data + the Φ2 clock
+        assert not mega.isEnabled() and "needs 27 channels" in mega.text()  # 26 data + the Φ2 clock
         entries["UART 115200 baud (Arduino serial)"].trigger()
         stored = capture_io.session_from_dict(settings.get_settings(capture_settings_file(controller.driver)))
         assert stored.frequency == 100_000  # the Uno's highest rate
