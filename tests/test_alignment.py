@@ -185,7 +185,7 @@ def test_the_menu_action_lets_the_user_choose_the_method(monkeypatch, make_datav
     QApplication.instance() or QApplication([])
     infos = []
     monkeypatch.setattr("openscilab.ui.messages.info", lambda *args, **kwargs: infos.append(args))
-    monkeypatch.setattr("openscilab.ui.documents.dataview.AlignDialog", Chooser)
+    monkeypatch.setattr("openscilab.ui.documents.dataview_capture.AlignDialog", Chooser)
     session, address = capture(offset=2)
     window = make_dataview()
     try:

@@ -763,13 +763,7 @@ class Instrument:
         except Exception:  # noqa: BLE001
             log.debug("driver_type = driver.driver_type failed (ignored)", exc_info=True)
             driver_type = AnalyzerDriverType.OTHER
-        kind = {
-            AnalyzerDriverType.SERIAL: "Pico",
-            AnalyzerDriverType.NETWORK: "Pico (network)",
-            AnalyzerDriverType.MULTI: "Pico multi device set",
-            AnalyzerDriverType.EMULATED: "File",
-            AnalyzerDriverType.DSLOGIC: "DSLogic",
-        }.get(driver_type, getattr(driver, "driver_id", "") or "Device")
+        kind = driver_type.title or getattr(driver, "driver_id", "") or "Device"
         try:
             capabilities = driver.capabilities()
         except Exception:  # noqa: BLE001

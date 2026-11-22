@@ -165,7 +165,7 @@ def test_clone_settings_does_not_copy_the_samples():
 
 def test_the_main_window_keeps_the_live_index_and_saves_huge_captures(application, monkeypatch, make_dataview,
                                                                     tmp_path):
-    from openscilab.ui.documents import dataview as module
+    from openscilab.ui.documents import dataview_files as module  # (where the data view saves)
 
     warnings = []
     monkeypatch.setattr(module.messages, "warning", lambda *args, **kwargs: warnings.append(args))

@@ -139,7 +139,7 @@ def test_inserting_works_without_a_device(make_dataview, monkeypatch):
         def exec(self):
             return True
 
-    monkeypatch.setattr("openscilab.ui.documents.dataview.CreateSamplesDialog", Dialog)
+    monkeypatch.setattr("openscilab.ui.documents.dataview_samples.CreateSamplesDialog", Dialog)
     view.insert_samples_dialog(0)
     assert view.model.sample_count == 1010
 

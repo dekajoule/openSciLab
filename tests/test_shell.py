@@ -225,9 +225,9 @@ def test_the_start_page_opens_recent_files_and_the_projects_of_the_library(shell
 
 
 def test_the_start_page_open_button_asks_for_a_file(shell, monkeypatch):
-    from openscilab.ui.shell import main_window
+    from PySide6.QtWidgets import QFileDialog
 
-    monkeypatch.setattr(main_window.QFileDialog, "getOpenFileName", lambda *a, **k: (DEMO, ""))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (DEMO, ""))
     page = shell.show_start_page()
     page.open_button.click()
     assert shell.active_document().title == "demo.lac"

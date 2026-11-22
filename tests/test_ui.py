@@ -162,7 +162,7 @@ def test_shifting_channels_left_fills_with_the_selected_level(window, monkeypatc
         def exec(self):
             return True
 
-    monkeypatch.setattr("openscilab.ui.documents.dataview.ShiftChannelsDialog", FakeDialog)
+    monkeypatch.setattr("openscilab.ui.documents.dataview_samples.ShiftChannelsDialog", FakeDialog)
     before = window.model.session.capture_channels[0].samples.copy()
     window.shift_channels()
     after = window.model.session.capture_channels[0].samples
@@ -240,7 +240,7 @@ def test_export_writes_the_selected_format(window, tmp_path, monkeypatch):
 
 def test_create_region_from_a_selection(window, monkeypatch):
     monkeypatch.setattr(
-        "openscilab.ui.documents.dataview.RegionDialog",
+        "openscilab.ui.documents.dataview_samples.RegionDialog",
         lambda region, parent=None: type("D", (), {"exec": lambda self: True})(),
     )
     window.create_region(10, 50)
@@ -296,10 +296,10 @@ def test_the_listing_of_a_data_view_is_kept(make_dataview):
 
 
 def test_the_help_menu_links_to_the_wiki(shell, monkeypatch):
-    from openscilab.ui.shell import main_window as main_window_module
+    import webbrowser
 
     opened = []
-    monkeypatch.setattr(main_window_module.webbrowser, "open", lambda url: opened.append(url))
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
 
     actions = {action.text().replace("&", ""): action for action in shell.help_menu.actions()}
     actions["Online documentation"].trigger()

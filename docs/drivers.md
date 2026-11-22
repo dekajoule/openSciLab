@@ -327,8 +327,15 @@ runs something has `runnable` and the run protocol, and a `fast_box` (a `Switch`
 Virtual time*. `services` (`ui/shell/services.py`) offers `open_file`, `add_document`, `activate`,
 `active_document`, `documents`, `active_project` with the signal `project_changed`,
 `active_document_changed`, `documents_changed`, `notify`, `select_section`, `show_settings`,
-`show_data`, `remember`, `data_folder(document)`, `hub` and `window` (only as the parent of dialogs). A section that cannot be
+`show_data`, `refresh_devices`, `remember`, `data_folder(document)`, `hub` and `window` (only as the parent of dialogs). A section that cannot be
 built is reported like a plugin that failed; the window opens without it.
+
+Something a plugin runs while a window is open - a server, a watcher - is an **extension**:
+`register_extension(key, factory)` (`ui/sections.py`) has every window build it with
+`factory(services)`; what it returns may have `preferences_changed(changes)` (the settings that
+changed) and `close()` (the window closes). openSciLab's own server for remote devices is one
+(`RemoteServer` in `ui/devices/remote.py`, registered by `plugins/remote.py`). An extension that
+cannot be started is reported like a section.
 
 ## Tests
 

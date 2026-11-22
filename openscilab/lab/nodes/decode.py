@@ -112,13 +112,14 @@ class DecodeNode(NodeRuntime):
 
     @staticmethod
     def _decode(capture: signals.Capture, decoder: str, channels: dict, options: dict) -> list:
-        from ... import api
-        from ...sigrok import worker
+        from ...core.annotation_export import annotation_records
+        from ...sigrok import decode, worker
 
         session = capture.to_session()
         # (in the decoder process: a flow that records and decodes at once must not stall its stream)
-        return api.Capture(session).decode(decoder, channels=channels, options=options,
-                                           registry=decoder_registry(), run=worker.run)
+        groups = decode.decode_groups(session, decoder, channels, options, registry=decoder_registry(),
+                                      run=worker.run)
+        return annotation_records(groups, session)
 
 
 def _option_param(option) -> ParamSpec:

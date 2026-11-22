@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget
 
 from ...core.instrument import Instrument
@@ -104,3 +105,59 @@ class RemoteSimulatorBackend(DeviceBackend):
 
     def connect(self, entry: DeviceEntry, parent: QWidget):
         raise ValueError("a remote device has no capture driver")
+
+
+class RemoteServer(QObject):
+    """The server remote devices connect to, while a window is open (an extension of the window,
+    ``ui/sections.py``, registered by ``plugins/remote.py``): started, restarted or stopped as the
+    settings *Remote devices* say; a device that connects or goes is noted in the status bar and the
+    Devices section lists it."""
+
+    #: a remote device connected or went: (event, name), from the server's thread
+    _event = Signal(str, str)
+
+    def __init__(self, services) -> None:
+        super().__init__(services)
+        self.services = services
+        self._event.connect(self._device_event)
+        self.apply()
+
+    def apply(self) -> None:
+        """Start, restart or stop the server as the settings say."""
+        from ...core import preferences
+        from ...driver.remote import servers
+
+        servers.managed = True  # flows do not start it by themselves in the application
+        if not preferences.get("remote.enabled"):
+            servers.stop_main()
+            return
+        token = str(preferences.get("remote.token") or "")
+        if not token:
+            token = servers.new_token()
+            preferences.update({"remote.token": token})
+        try:
+            server = servers.start_main(int(preferences.get("remote.port")), token,
+                                        beacon=bool(preferences.get("remote.beacon")))
+        except OSError as error:
+            self.services.notify(f"Remote devices: port {preferences.get('remote.port')} cannot be "
+                                 f"used ({error})", 10000)
+            return
+        server.subscribe(lambda event, connection: self._event.emit(event, connection.name))
+
+    def preferences_changed(self, changes: dict) -> None:
+        if any(key.startswith("remote.") for key in changes):
+            self.apply()
+        if any(key.startswith("timing.") for key in changes):
+            from ...driver.remote import servers
+
+            for connection in servers.connections():
+                connection.use_timescale()  # (this computer's clock follows a time scale now, or no more)
+
+    def close(self) -> None:
+        from ...driver.remote import servers
+
+        servers.stop_main()
+
+    def _device_event(self, event: str, name: str) -> None:
+        self.services.notify(f"Remote device {name} {event}", 6000)
+        self.services.refresh_devices()

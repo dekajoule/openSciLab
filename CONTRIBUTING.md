@@ -21,6 +21,13 @@ openSciLab is a beta: reports of what works on real hardware, and what does not,
 welcome. Problems with the Pico logic analyzer hardware design itself are best discussed in the
 [original project](https://github.com/gusmanb/logicanalyzer).
 
+## How the code is organised
+
+[ARCHITECTURE.md](ARCHITECTURE.md) is the map of the code: the packages, the rules between them and
+where a new thing goes. The reasons for those rules are recorded as
+[architecture decision records](docs/adr/); a change that breaks one brings a new ADR.
+[AGENTS.md](AGENTS.md) sums up the rules for coding agents (and is a good checklist for people too).
+
 ## Development setup
 
 ```bash

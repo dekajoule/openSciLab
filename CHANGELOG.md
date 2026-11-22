@@ -137,6 +137,9 @@ A plugin can add an entry of the activity bar with a section of the sidebar, kin
 (their files, *File → New*, the Project section, the session) and icons (`openscilab/ui/sections.py`,
 [docs/drivers.md](docs/drivers.md#sections-and-documents-of-a-plugin), the example
 `examples/plugins/notes_section.py`); *Help → Plugins* lists them. *Circuits* is built this way.
+A plugin can also run something while a window is open - a server, a watcher - with
+`register_extension` (told when the settings change and when the window closes); the server of the
+remote devices is one now. `services.refresh_devices()` lists the devices again.
 
 ### One typeface, a new mark
 
@@ -348,6 +351,8 @@ theme). Checked by `tests/test_terminology.py`, `tests/test_theme_tokens.py` and
   waveform into 50 Ω), and its frequency and power on the front panel. Its serial protocol, not
   documented by the maker, is in docs/protocols.md.
 - Settings of a front panel show as many digits as they give (`digits`).
+- A device whose serial port goes away is marked *unplugged* whatever its kind (an Arduino, the
+  HT008 ...), not only a Pico board.
 - **The monitor of a Pico with its analog inputs**: the pin table of the device document starts the
   monitor with the pins of the ADC (GP26–GP28), which the Pico refused ("no analog input 'GP26'
   (A0, A1, …)"); the monitor and the analog inputs of a Pico take A0–A2 and their pins alike.
