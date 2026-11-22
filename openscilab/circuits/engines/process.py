@@ -285,6 +285,10 @@ class EngineProcess:
         self.ended = threading.Event()
         #: grows every time the process is given back to the pool: a run knows whether it still owns it
         self.generation = 0
+        #: it ran microcontrollers: its ngspice keeps the step callback of the co-simulation for good
+        #: (``ngspice.NgSpice.synchronize``), which changes how it takes its steps - not fit for a circuit
+        #: without them, so it is not kept for the next run (:func:`release`)
+        self.stepped = False
         #: called with each batch: (times, columns, latest, state, error, extra), in the reading thread
         self.on_batch: Callable[..., None] | None = None
         #: called once when the process ended (in the reading thread)
@@ -335,6 +339,8 @@ class EngineProcess:
         """Send a request; its answer comes as the future's result (in the reading thread)."""
         if self.ended.is_set() or not self.process.is_alive():
             raise EngineEnded("the simulator's process ended")
+        if method == "live" and arguments.get("mcus"):
+            self.stepped = True
         future: Future = Future()
         with self._lock:
             number = next(self._numbers)
@@ -399,7 +405,7 @@ def release(engine: EngineProcess) -> None:
     engine.on_batch = None
     engine.on_ended = None
     engine.generation += 1
-    if not engine.alive:
+    if not engine.alive or engine.stepped:
         engine.close()
         return
     with _pool_lock:

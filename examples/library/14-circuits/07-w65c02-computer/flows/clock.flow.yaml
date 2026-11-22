@@ -1,0 +1,11 @@
+flow: The slow clock
+description: "J1 on SLOW, RV1 almost at 0: the 555 gives about 200 Hz (f = 1.44 / ((R5 + 2 (R6 + RV1)) C1)) and PHI2, squared by U6A and U6B, follows it."
+nodes:
+  clock: {type: device.device, address: "circuit:circuits/clock.circuit.yaml", at: [0, 0]}
+  capture: {type: device.capture, channels: [PHI2], rate: 200 kHz, duration: 30 ms, at: [288, 0]}
+  frequency: {type: measure.frequency, at: [576, 0]}
+  check: {type: report.check, expected: 205, tolerance: 10, unit: Hz, title: PHI2 frequency, at: [864, 0]}
+edges:
+  - clock.device -> capture.device
+  - capture.PHI2 -> frequency.in
+  - frequency.out -> check.in

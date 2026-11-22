@@ -4,6 +4,7 @@ channel."""
 
 from __future__ import annotations
 
+import os
 import threading
 
 import pytest
@@ -218,3 +219,76 @@ def test_the_options_keep_a_channel_the_capture_does_not_have(registry, qtbot):
     assert "not in this capture" in dialog._channel_widgets[rx].currentText()
     dialog._accept()  # e.g. after changing an option
     assert instance.channel_map[rx] == 7  # not dropped
+
+
+EXAMPLES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
+
+
+@pytest.mark.parametrize("profile_first", [False, True])
+def test_the_decoders_of_a_profile_find_their_channels_by_name_in_another_capture(make_dataview, profile_first):
+    """The C64 decoder of the Mega profile on a capture of a LogicAnalyzer: its channel numbers are
+    of the Mega, the capture names its channels as the decoder does."""
+    from openscilab.core import capture_io
+    from openscilab.core.profiles import read_profiles_file
+
+    session = capture_io.load_capture(os.path.join(EXAMPLES, "c64-start-real-device.lac")).session
+    (profile,) = read_profiles_file(os.path.join(EXAMPLES, "profiles", "c64-arduino-mega.json"))
+    view = make_dataview()
+    if profile_first:
+        view.decoder_manager.load_configuration(profile.decoder_configuration)
+    view.load_session(session)
+    if not profile_first:
+        view.decoder_manager.load_configuration(profile.decoder_configuration)
+    instance = view.provider.instances[0]
+    info = view.provider.info_for(instance)
+    names = {channel.channel_number: channel.channel_name for channel in session.capture_channels}
+    assigned = {channel.name: names.get(instance.channel_map.get(channel.index)) for channel in info.channels
+                if instance.channel_map.get(channel.index) is not None}
+    assert {n: a for n, a in assigned.items() if a != n} == {}  # A0 (Y) on "A0 (Y)", Φ2 (E) on "Φ2 (E)"
+    assert view.provider.unavailable_channels(instance, session.capture_channels) == []
+    assert "missing" not in view.decoder_manager.list.item(0).text()
+
+
+def test_a_decoder_on_an_unnamed_channel_stays_there(registry):
+    from openscilab.ui.widgets.decoder_manager import refit_channels_by_name
+
+    provider = uart(registry, 2)
+    instance = provider.instances[0]
+    channels = [AnalyzerChannel(channel_number=2), AnalyzerChannel(channel_number=5, channel_name="RX")]
+    assert not refit_channels_by_name(provider.info_for(instance), instance, channels)
+    assert instance.channel_map[[c.index for c in provider.info_for(instance).channels if c.id == "rx"][0]] == 2
+
+
+def test_the_c64_decoder_reads_a_state_analysis_of_a_timing_capture(make_dataview, monkeypatch):
+    """Analyze > State analysis on Φ2 (falling): the states keep their clock, the decoder its Φ2."""
+    from openscilab.core import capture_io
+    from openscilab.core.profiles import read_profiles_file
+    from openscilab.driver.models import EdgeKind
+    from openscilab.ui.dialogs.state_dialog import StateDialog
+
+    session = capture_io.load_capture(os.path.join(EXAMPLES, "c64-start-real-device.lac")).session
+    (profile,) = read_profiles_file(os.path.join(EXAMPLES, "profiles", "c64-arduino-mega.json"))
+    view = make_dataview()
+    view.load_session(session)
+    view.decoder_manager.load_configuration(profile.decoder_configuration)
+    from openscilab.sigrok import worker
+
+    def disassembly(session) -> list[str]:
+        return [segment.values[0] for group in worker.run(view.provider.frozen(), session)
+                for row in group.annotations if row.name == "Disassembly" for segment in row.segments]
+
+    assert disassembly(session)[1] == "$FCE2  LDX #$FF"
+
+    def resample(dialog):
+        dialog.clock_combo.setCurrentIndex(dialog.clock_combo.findData(0))  # Φ2 (E)
+        dialog.edge_combo.setCurrentIndex(dialog.edge_combo.findData(EdgeKind.FALLING))
+        dialog._accept()
+        return True
+
+    monkeypatch.setattr(StateDialog, "exec", resample)
+    view.state_analysis()
+    states = view.model.session
+    assert states.clock_channel == 0 and states.clock_name == "Φ2 (E)"
+    assert view.captured_session is session  # (a repeated capture: the timing again)
+    assert "missing" not in view.decoder_manager.list.item(0).text()
+    assert "$FCE2  LDX #$FF" in disassembly(states)[:3]

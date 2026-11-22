@@ -295,7 +295,7 @@ def spec_from_data(data: dict, source: str = "builtin", library: str = "") -> Co
         library=library or str(data.get("library", "")), board=str(data.get("board", "")),
         show=tuple(str(name) for name in data.get("show", ("value",))), current=str(data.get("current", "")),
         extra={key: value for key, value in data.items() if key in ("mcu", "digital_model", "rf", "screen", "lights",
-                                                                    "physics")})
+                                                                    "physics", "display")})
 
 
 def load_file(path: str, source: str = "builtin") -> tuple[list[ComponentSpec], list[str]]:

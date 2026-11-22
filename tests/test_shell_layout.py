@@ -206,7 +206,7 @@ def _mouse(kind, widget, position, buttons):
     return QMouseEvent(kind, QPointF(position), widget.mapToGlobal(QPointF(position)), button, buttons, Qt.NoModifier)
 
 
-def test_a_tab_dragged_off_its_bar_gets_a_window_of_its_own_a_double_click_does_not(shell):
+def test_a_tab_dragged_off_its_bar_or_double_clicked_gets_a_window_of_its_own(shell):
     first, second = shell.new_flow(), shell.new_flow()
     group = shell.area.group_of(first)
     bar = group.tabBar()
@@ -219,10 +219,11 @@ def test_a_tab_dragged_off_its_bar_gets_a_window_of_its_own_a_double_click_does_
     bar.mouseMoveEvent(_mouse(QEvent.MouseMove, bar, start + QPoint(0, 120), Qt.LeftButton))
     settle()
     assert shell.area.is_detached(second) and group.indexOf(second) < 0
-    # double-clicked: it stays (the tab's menu has "Open in a new window")
+    # double-clicked: a window of its own, too
     point = bar.tabRect(group.indexOf(first)).center()
     bar.mouseDoubleClickEvent(_mouse(QEvent.MouseButtonDblClick, bar, point, Qt.LeftButton))
     settle()
-    assert not shell.area.is_detached(first)
+    assert shell.area.is_detached(first) and group.indexOf(first) < 0
+    shell.area.attach(first)
     shell.area.attach(second)
     assert not shell.area.is_detached(first) and not shell.area.is_detached(second)

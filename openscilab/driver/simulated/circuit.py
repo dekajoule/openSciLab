@@ -775,6 +775,19 @@ def _file(path: str = "", channel: int = 0, **options) -> Replay:
     return Replay(found.samples, session.frequency, f"{found.display_name} of {path.rsplit('/', 1)[-1]}", **options)
 
 
+def _circuit(path: str = "", net: str = "", **options) -> Source:
+    """The net (or probe) ``net`` of the circuit file ``path`` while it runs (``circuits/source.py``)."""
+    if not path or not net:
+        raise ValueError("a circuit source needs the circuit's file and a net")
+    from ...circuits import CircuitError
+    from ...circuits.source import net_source
+
+    try:
+        return net_source(str(path), str(net))
+    except CircuitError as error:
+        raise ValueError(str(error)) from None
+
+
 #: Source types of profile files: ``{"type": "square", "frequency": "1 kHz"}``.
 SOURCE_TYPES: dict[str, Callable[..., Source]] = {
     "constant": Constant,
@@ -793,6 +806,7 @@ SOURCE_TYPES: dict[str, Callable[..., Source]] = {
     "button": Button,
     "c64": _c64,
     "file": _file,
+    "circuit": _circuit,
 }
 
 

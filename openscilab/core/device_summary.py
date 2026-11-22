@@ -19,6 +19,7 @@ its limit, else the memory. Qt free.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -83,6 +84,19 @@ def clock_text(session: Any) -> str:
     edge = {"rising": "↑", "falling": "↓"}.get(getattr(session.clock_edge, "value", session.clock_edge), "")
     name = getattr(session, "clock_name", "") or f"channel {session.clock_channel + 1}"
     return f"{name} {edge}".strip()
+
+
+def channel_label(number: int, pin: str = "", name: str = "", board: Optional[int] = None) -> str:
+    """A channel as the lists to choose one show it: its number (and board of a set of devices), the
+    device's name of its pin and the name given to it, e.g. ``Channel 31 · D2 · Φ2 (E)``; the pin
+    only when the device names it (not ``CH31``), the name only when there is one."""
+    parts = [f"Channel {number + 1}" + (f" (board {board})" if board is not None else "")]
+    pin, name = (pin or "").strip(), (name or "").strip()
+    if pin and not re.fullmatch(r"(CH|Channel) ?\d+", pin, re.IGNORECASE):
+        parts.append(pin)
+    if name and name not in parts:
+        parts.append(name)
+    return " · ".join(parts)
 
 
 class LimitCache:

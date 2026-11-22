@@ -641,4 +641,7 @@ def open_shell(profile: str = "uno", clock=None):
     driver = ArduinoDriver(shell.host, address=f"arduino-sim:{profile}",
                            name=f"simulated Arduino ({profile})")
     driver.shell = shell
+    from .stored import share_simulation
+
+    share_simulation(driver, shell.instrument, f"arduino-sim:{profile}")
     return driver

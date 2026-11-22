@@ -218,10 +218,10 @@ def test_settings_are_cloned_without_touching_the_channels():
 
 # ----------------------------------------------------------------- the window
 def test_ports_are_read_in_a_thread(shell, monkeypatch):
-    from openscilab.ui.shell import main_window
+    from openscilab.ui.shell import window_devices
 
     readers = []
-    monkeypatch.setattr(main_window, "serial_ports",
+    monkeypatch.setattr(window_devices, "serial_ports",
                         lambda: (readers.append(threading.current_thread()), frozenset({"/dev/x"}))[1])
     seen = []
     monkeypatch.setattr(shell, "watch_ports", lambda ports=None: seen.append(ports))

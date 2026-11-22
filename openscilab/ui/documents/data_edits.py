@@ -62,6 +62,8 @@ class DataState:
     bookmarks: list[tuple[int, str]] = field(default_factory=list)
     buses: list = field(default_factory=list)
     pinned: frozenset = frozenset()
+    #: the analog channels, in their order
+    analog: list = field(default_factory=list)
 
 
 def take(view: "DataView") -> Optional[DataState]:
@@ -82,6 +84,7 @@ def take(view: "DataView") -> Optional[DataState]:
         bookmarks=[(bookmark.sample, bookmark.name) for bookmark in model.bookmarks],
         buses=[copy.copy(bus) for bus in model.buses],
         pinned=frozenset(model._pinned),
+        analog=list(session.analog_channels),
     )
 
 
@@ -96,6 +99,7 @@ def restore(view: "DataView", state: DataState) -> None:
     view._loading += 1
     try:
         session.capture_channels = [item.channel for item in state.channels]
+        session.analog_channels = list(state.analog)
         for item in state.channels:
             item.channel.samples = item.samples
             item.channel.channel_name = item.name

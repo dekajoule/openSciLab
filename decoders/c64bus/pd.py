@@ -15,7 +15,7 @@
 
 import sigrokdecode as srd
 
-from .disasm import Cycle, Disassembler
+from .disasm import CPU_6510, CPU_65C02, Cycle, Disassembler
 
 # Memory map of the C64 (standard configuration after a reset).
 # (first address, last address, short name, long name)
@@ -40,6 +40,81 @@ C64_MAP = (
     (0xFFFC, 0xFFFD, 'RES vec',   'Reset vector'),
     (0xFFFE, 0xFFFF, 'IRQ vec',   'IRQ/BRK vector'),
 )
+
+# The registers of a 6522 VIA, 16 of them, mirrored over its address range: (short, long)
+VIA_REGISTERS = (
+    ('ORB',   'Output register B'),
+    ('ORA',   'Output register A'),
+    ('DDRB',  'Data direction B'),
+    ('DDRA',  'Data direction A'),
+    ('T1C-L', 'Timer 1 counter low'),
+    ('T1C-H', 'Timer 1 counter high'),
+    ('T1L-L', 'Timer 1 latch low'),
+    ('T1L-H', 'Timer 1 latch high'),
+    ('T2C-L', 'Timer 2 counter low'),
+    ('T2C-H', 'Timer 2 counter high'),
+    ('SR',    'Shift register'),
+    ('ACR',   'Auxiliary control'),
+    ('PCR',   'Peripheral control'),
+    ('IFR',   'Interrupt flags'),
+    ('IER',   'Interrupt enable'),
+    ('ORA*',  'Output register A, no handshake'),
+)
+
+
+def via_registers(uses=()):
+    """The VIA registers, the first ones with what they do on the board (``uses``)."""
+    uses = tuple(uses) + ('',) * (len(VIA_REGISTERS) - len(uses))
+    return tuple((short, '%s: %s' % (long, use) if use else long)
+                 for (short, long), use in zip(VIA_REGISTERS, uses))
+
+
+# Ben Eater's 6502 computer: 16 KB RAM, the 6551 ACIA (later videos) and the 6522 VIA, 32 KB EEPROM.
+# (A fifth element: the registers of a chip, mirrored over the region.)
+BEN_EATER_MAP = (
+    (0x0000, 0x00FF, 'Zero page', 'Zero page (RAM)'),
+    (0x0100, 0x01FF, 'Stack',     'Processor stack (RAM)'),
+    (0x0200, 0x3FFF, 'RAM',       'RAM (62256)'),
+    (0x4000, 0x4FFF, '-',         'Not decoded'),
+    (0x5000, 0x5FFF, 'ACIA',      '6551 ACIA (serial)'),
+    (0x6000, 0x7FFF, 'VIA',       '6522 VIA', via_registers()),
+    (0x8000, 0xFFF9, 'ROM',       'EEPROM (28C256)'),
+    (0xFFFA, 0xFFFB, 'NMI vec',   'NMI vector (EEPROM $7FFA)'),
+    (0xFFFC, 0xFFFD, 'RES vec',   'Reset vector (EEPROM $7FFC)'),
+    (0xFFFE, 0xFFFF, 'IRQ vec',   'IRQ/BRK vector (EEPROM $7FFE)'),
+)
+
+# Ben Eater's computer without the ACIA: A15 selects the ROM, below it A14 RAM or I/O and A13 the
+# VIA; $4000-$5FFF is free. On the VIA the LCD (data on port B; RS, R/W, E on PA5-PA7) and four
+# LEDs (PA0-PA3).
+BEN_EATER_NO_ACIA_MAP = (
+    (0x0000, 0x00FF, 'Zero page', 'Zero page (RAM)'),
+    (0x0100, 0x01FF, 'Stack',     'Processor stack (RAM)'),
+    (0x0200, 0x3FFF, 'RAM',       'RAM (62256)'),
+    (0x4000, 0x5FFF, 'free',      'Free (not decoded)'),
+    (0x6000, 0x7FFF, 'VIA',       '6522 VIA', via_registers((
+        'LCD data DB0-DB7',
+        'PA5-PA7 LCD RS, R/W, E; PA0-PA3 LEDs D2-D5',
+        '$FF: all outputs',
+        '$FF: PA0-PA3 LEDs, PA4 free'))),
+    (0x8000, 0xFFF9, 'ROM',       'EEPROM (28C256)'),
+    (0xFFFA, 0xFFFB, 'NMI vec',   'NMI vector (EEPROM $7FFA)'),
+    (0xFFFC, 0xFFFD, 'RES vec',   'Reset vector, program start (EEPROM $7FFC)'),
+    (0xFFFE, 0xFFFF, 'IRQ vec',   'IRQ/BRK vector (EEPROM $7FFE)'),
+)
+
+# Any 6502: what the CPU itself fixes.
+GENERIC_MAP = (
+    (0x0000, 0x00FF, 'Zero page', 'Zero page'),
+    (0x0100, 0x01FF, 'Stack',     'Processor stack'),
+    (0x0200, 0xFFF9, 'Memory',    'Memory'),
+    (0xFFFA, 0xFFFB, 'NMI vec',   'NMI vector'),
+    (0xFFFC, 0xFFFD, 'RES vec',   'Reset vector'),
+    (0xFFFE, 0xFFFF, 'IRQ vec',   'IRQ/BRK vector'),
+)
+
+MAPS = {'C64': C64_MAP, 'Ben Eater 6502': BEN_EATER_MAP,
+        'Ben Eater 6502 without ACIA': BEN_EATER_NO_ACIA_MAP, 'generic 6502': GENERIC_MAP}
 
 # Pin names of the expansion port. The channel names match the names in the
 # profile examples/profiles/c64-logicanalyzer-v2.json exactly, so the channels are
@@ -69,10 +144,21 @@ READ_AT_EDGE = 'at falling edge'
 BUS_NAMES = dict([(i, 'A%d' % i) for i in range(16)] + [(16 + i, 'D%d' % i) for i in range(8)]
                  + [(25, 'R/W')])
 
+# At this sample rate and below a sample is longer than the time the 6502 holds the bus after the
+# falling PHI2 edge: the next cycle's address already shows at the edge sample itself, that is
+# no bus changing at the read point (a slow 6502 sampled in milliseconds, as an Arduino does).
+COARSE_RATE = 10000000
 
-def region_of(addr):
-    for start, end, short, long in C64_MAP:
+# Fewer cycles than this and no instruction found: the capture is too short, not misread.
+FEW_CYCLES = 32
+
+
+def region_of(addr, memory_map=C64_MAP):
+    for start, end, short, long, *registers in memory_map:
         if start <= addr <= end:
+            if registers:
+                name, text = registers[0][(addr - start) % len(registers[0])]
+                return '%s %s' % (short, name), '%s %s' % (long, text)
             return short, long
     return '?', 'unknown'
 
@@ -90,7 +176,8 @@ class Decoder(srd.Decoder):
     id = 'c64bus'
     name = 'C64 bus'
     longname = 'Commodore 64 / 6502 system bus'
-    desc = 'Decodes 6502/6510 bus cycles, the C64 memory regions and disassembles the code.'
+    desc = ('Decodes 6510/6502/W65C02S bus cycles, the memory regions (C64, Ben Eater 6502) '
+            'and disassembles the code, with or without SYNC.')
     license = 'gplv2+'
     inputs = ['logic']
     outputs = []
@@ -107,16 +194,21 @@ class Decoder(srd.Decoder):
            {'id': 'rw', 'name': 'R/W (5)', 'desc': 'Read (high) / write (low)'})
     )
 
-    # 26 = BA, 27..29 = /RESET, /IRQ, /NMI, 30..33 = /ROML, /ROMH, /IO1, /IO2
+    # 26 = BA, 27..29 = /RESET, /IRQ, /NMI, 30..33 = /ROML, /ROMH, /IO1, /IO2, 34 = SYNC
     optional_channels = (
         ({'id': 'ba', 'name': 'BA (12)', 'desc': 'Bus available (VIC)'},)
         + tuple({'id': cid, 'name': cname, 'desc': 'Control line %s' % short}
                 for cid, cname, short in CONTROL_LINES)
         + tuple({'id': cid, 'name': cname, 'desc': long}
                 for cid, cname, short, long in SELECT_LINES)
+        # The 6510 of the C64 has none; a 6502 or W65C02S (pin 7) marks its opcode fetches with it
+        + ({'id': 'sync', 'name': 'SYNC', 'desc': 'Opcode fetch (SYNC of a 6502/W65C02S, pin 7)'},)
     )
 
     options = (
+        # The 6510 (an NMOS 6502) and the CMOS W65C02S differ in opcodes and cycles
+        {'id': 'cpu', 'desc': 'CPU', 'default': CPU_6510, 'values': (CPU_6510, CPU_65C02)},
+        {'id': 'map', 'desc': 'Memory map', 'default': 'C64', 'values': tuple(MAPS)},
         {'id': 'fmt', 'desc': 'Address format', 'default': 'hex',
          'values': ('hex', 'dec')},
         {'id': 'regions', 'desc': 'Show memory regions',
@@ -153,24 +245,35 @@ class Decoder(srd.Decoder):
     PHI2, RW, BA = 24, 25, 26
     CONTROL_BASE = 27
     SELECT_BASE = CONTROL_BASE + len(CONTROL_LINES)
+    SYNC = SELECT_BASE + len(SELECT_LINES)
 
     def __init__(self):
+        self.samplenum = 0  # (the end of a capture without a cycle; libsigrokdecode sets it, too)
         self.reset()
 
     def reset(self):
+        self.samplerate = None
         self.last_region = None
         self.last_region_long = None
         self.region_ss = 0
         # Start of the low phase of every control line (None = inactive).
         self.control_ss = [None] * len(CONTROL_LINES)
         self.disasm = Disassembler()
+        self.memory_map = C64_MAP
         self.put_sample_point = None
         self.instructions = 0
+        self.cycle_count = 0
         self.first_cycle_ss = None
         self.last_cycle_es = None
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
+        self.disasm = Disassembler(self.options.get('cpu', CPU_6510))
+        self.memory_map = MAPS.get(self.options.get('map'), C64_MAP)
+
+    def metadata(self, key, value):
+        if key == srd.SRD_CONF_SAMPLERATE:
+            self.samplerate = value
 
     def fmt_addr(self, addr):
         if self.options['fmt'] == 'dec':
@@ -213,7 +316,7 @@ class Decoder(srd.Decoder):
         for i, (cid, cname, short, long) in enumerate(SELECT_LINES):
             if self.is_low(pins, self.SELECT_BASE + i):
                 return short, long
-        return region_of(addr)
+        return region_of(addr, self.memory_map)
 
     def track_controls(self, pins, ss):
         for i, (cid, cname, short) in enumerate(CONTROL_LINES):
@@ -241,10 +344,15 @@ class Decoder(srd.Decoder):
             self.put_events(self.disasm.finish())
             if not self.instructions and self.first_cycle_ss is not None:
                 # Without a hint the Disassembly row would simply be missing.
+                if self.cycle_count < FEW_CYCLES:
+                    text = ('No disassembly: %d bus cycles are too few to follow the program; '
+                            'capture more of them.' % self.cycle_count)
+                else:
+                    text = ('No disassembly: the program flow could not be followed. The bus '
+                            'changes at the read point; align the boards (Data > Align boards) '
+                            'or set a read offset.')
                 self.put(self.first_cycle_ss, self.last_cycle_es, self.out_ann,
-                         [6, ['No disassembly: the program flow could not be followed. The bus '
-                              'changes at the read point; align the boards (Data > Align boards) '
-                              'or set a read offset.', 'No disassembly', '?']])
+                         [6, [text, 'No disassembly', '?']])
 
     def read_bus(self, peek, ss, edge, es, edge_pins):
         '''(sample, pins, names of bus lines changing next to the sample).'''
@@ -254,9 +362,12 @@ class Decoder(srd.Decoder):
         sample = min(max(base + int(self.options['offset']), ss), es - 1)
         before = peek(sample - 1) if sample > 0 else None
         after = peek(sample + 1)
+        if sample + 1 == edge and self.samplerate and self.samplerate <= COARSE_RATE:
+            after = None  # the edge sample belongs to the next cycle
         pins = peek(sample)  # looked at last: the sample point of the cycle
         unstable = [name for pin, name in sorted(BUS_NAMES.items())
-                    if (before is not None and before[pin] != pins[pin]) or after[pin] != pins[pin]]
+                    if (before is not None and before[pin] != pins[pin])
+                    or (after is not None and after[pin] != pins[pin])]
         return sample, pins, unstable
 
     def decode(self):
@@ -287,6 +398,7 @@ class Decoder(srd.Decoder):
             sample, pins, unstable = self.read_bus(peek, ss, edge, es, edge_pins)
             if self.first_cycle_ss is None:
                 self.first_cycle_ss = ss
+            self.cycle_count += 1
             self.last_cycle_es = es
 
             addr = 0
@@ -323,7 +435,8 @@ class Decoder(srd.Decoder):
                               'Unstable', '!']])
 
             if disassemble and not vic:
-                self.put_events(self.disasm.feed(Cycle(ss, es, sample, addr, data, bool(rw))))
+                sync = bool(pins[self.SYNC]) if self.has_channel(self.SYNC) else None
+                self.put_events(self.disasm.feed(Cycle(ss, es, sample, addr, data, bool(rw), sync)))
 
             # Merge consecutive accesses to the same region.
             if short != self.last_region:

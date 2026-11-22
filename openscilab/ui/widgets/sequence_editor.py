@@ -120,6 +120,13 @@ class StageEditor(QFrame):
         self.title.setText(f"Stage {index + 1}")
         self.within_edit.setEnabled(index > 0)
 
+    def set_channel_labels(self, labels: dict[int, str]) -> None:
+        self.channels = [(number, labels.get(number, name)) for number, name in self.channels]
+        for item in range(self.channel_combo.count()):
+            number = self.channel_combo.itemData(item)
+            if number in labels:
+                self.channel_combo.setItemText(item, labels[number])
+
     def _update_fields(self) -> None:
         kind = self.kind_combo.currentData()
         pattern = kind == ConditionKind.PATTERN
@@ -220,6 +227,12 @@ class SequenceEditor(QWidget):
         row.addWidget(self.limit_label, 1)
         layout.addLayout(row)
         self.add_stage()
+
+    def set_channel_labels(self, labels: dict[int, str]) -> None:
+        """Name the channels anew (``number -> label``), in the stages there are and those to come."""
+        self.channels = [(number, labels.get(number, name)) for number, name in self.channels]
+        for editor in self.stages:
+            editor.set_channel_labels(labels)
 
     def add_stage(self, stage: Optional[TriggerStage] = None) -> None:
         if len(self.stages) >= self.max_stages:

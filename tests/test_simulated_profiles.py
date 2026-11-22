@@ -92,11 +92,23 @@ def test_the_uno_r4_dac_is_wired_to_a1():
 
 
 @pytest.mark.parametrize("kind", sorted(SOURCE_TYPES))
-def test_every_source_type(kind):
+def test_every_source_type(kind, request):
     options = {"button": {"presses": [[0.001, 0.002]]}, "pulse": {"period": "1 ms", "width": "250 us"},
                "uart": {"text": "A"}, "counter": {"bit": 1},
-               "file": {"path": os.path.join(os.path.dirname(__file__), "..", "examples", "demo.lac")}}.get(kind, {})
+               "file": {"path": os.path.join(os.path.dirname(__file__), "..", "examples", "demo.lac")},
+               "circuit": {"path": os.path.join(os.path.dirname(__file__), "..", "examples", "library", "14-circuits",
+                                                "07-w65c02-computer", "circuits", "clock.circuit.yaml"),
+                           "net": "PHI2"}}.get(kind, {})
+    if kind == "circuit":
+        from openscilab.circuits import engines
+
+        if not engines.available():
+            pytest.skip("ngspice is not installed")
     source = make_source({"type": kind, **options})
+    if kind == "circuit":
+        from openscilab.circuits.source import release_net_source
+
+        request.addfinalizer(lambda: release_net_source(source))
     digital = source.digital(0.0, 1e6, 5000)
     analog = source.analog(0.0, 1e6, 5000)
     assert digital.dtype == np.uint8 and len(digital) == 5000 and set(np.unique(digital)) <= {0, 1}

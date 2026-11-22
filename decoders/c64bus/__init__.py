@@ -14,8 +14,9 @@
 ##
 
 '''
-Decodes the system bus of a 6502/6510 computer (address, data, R/W)
-and labels the memory regions of the Commodore 64.
+Decodes the system bus of a 6502/6510 or W65C02S computer (address, data, R/W,
+optionally SYNC) and labels the memory regions of the Commodore 64 or of Ben
+Eater's 6502 computer.
 '''
 
 from .pd import Decoder

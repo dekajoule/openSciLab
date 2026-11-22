@@ -310,6 +310,20 @@ class AnalyzerDriverType(Enum):
     #: A driver added later; it names itself with ``driver_id``
     OTHER = "Other"
 
+    @property
+    def title(self) -> str:
+        """What people call a device of this type ("" for ``OTHER``: its ``driver_id`` names it)."""
+        return _DRIVER_TYPE_TITLES.get(self, "")
+
+
+_DRIVER_TYPE_TITLES = {
+    AnalyzerDriverType.SERIAL: "Pico",
+    AnalyzerDriverType.NETWORK: "Pico (network)",
+    AnalyzerDriverType.MULTI: "Pico multi device set",
+    AnalyzerDriverType.EMULATED: "File",
+    AnalyzerDriverType.DSLOGIC: "DSLogic",
+}
+
 
 def capture_mode_for_bits(bits: Sequence[int]) -> CaptureMode:
     """Narrowest mode whose samples hold every bit."""

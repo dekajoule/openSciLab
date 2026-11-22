@@ -462,6 +462,7 @@ active edge (one cycle plus synchroniser jitter).
 | `main.c` | Unknown trigger types started an edge capture. | `CAPTURE_ERROR`. |
 | `capture.c` | Undefined shifts: `systickLoops << 24` (signed) and the blast mask for the external trigger (negative shift). A blast capture kept the trigger input inverted. | Unsigned shift, mask only for sampled GPIOs, GPIOs released. |
 | `CMakeLists.txt` | A changed `BOARD_TYPE` was ignored in an existing build directory (cached `PICO_BOARD`). | `PICO_BOARD` is forced. |
+| `capture.pio`, `capture.c` | The edge trigger (types 0 and 5) and the pattern triggers were armed as the capture started. An edge that came sooner than the pre-trigger time left the oldest pre-trigger samples unrecorded: they were the zeros of the cleared buffer (a Pico reading its own 1 kHz PWM at 1 MHz with 1000 pre-trigger samples: up to 1000 zero samples). | The capture programs record the pre-trigger samples first: `POSITIVE_CAPTURE` and `NEGATIVE_CAPTURE` before they look at the trigger pin, `COMPLEX_CAPTURE` before IRQ 6 lets the trigger program (pattern, edge with output) start. The burst measuring programs and the fast trigger are unchanged. |
 
 ## Known, unfixed issues
 

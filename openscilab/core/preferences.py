@@ -28,7 +28,7 @@ DEVICE_PROCESS = True
 
 DEFAULTS: dict[str, Any] = {
     # appearance
-    "appearance.theme": "dark",
+    "appearance.theme": "light",
     #: point size of the application font; 0: the system size
     "appearance.font_size": 10,
     # startup

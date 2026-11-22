@@ -10,7 +10,8 @@
 
 Every row carries a visibility toggle, a pin, the channel label (click to change
 its colour) and an editable name; rows lower than ``COMPACT_ROW_HEIGHT`` show the name in the
-label instead of the name field.  Unlike the original, the visibility button
+label instead of the name field.  A row is dragged by its name to another place in the column
+(a line shows where it goes).  Unlike the original, the visibility button
 toggles: there the eye only ever *hid* a channel and the only way to get it back
 was the "show all" button in the header.  Pinned channels are shown by a second
 column above the scrolling one, so they stay in view while scrolling vertically.
@@ -26,6 +27,7 @@ from PySide6.QtGui import QColor, QDrag, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QColorDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -39,7 +41,7 @@ from PySide6.QtWidgets import (
 from .. import colors
 from ...driver.models import AnalyzerChannel
 from ..icons import icon
-from ..theme import DISPLAY, set_variant
+from ..theme import DISPLAY, set_role, set_variant
 
 # the waveform display is dark in both themes
 ACCENT_HOVER = DISPLAY["ACCENT_HOVER"]
@@ -58,13 +60,15 @@ COLOR_STRIP_WIDTH = 4
 
 #: the width of the visibility and pin buttons of a row
 ROW_BUTTON_WIDTH = 18
+#: the line that shows where a dragged channel goes
+DROP_LINE_HEIGHT = 2
 
 
 class ChannelRow(QWidget):
     """One channel in a single line: colour strip, visibility, number and name, pin.
 
     Double-click the name to rename the channel (or use the context menu), click the colour
-    strip to change its colour.
+    strip to change its colour, drag the name to move the channel.
     """
 
     visibility_toggled = Signal(object)
@@ -83,6 +87,8 @@ class ChannelRow(QWidget):
         self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_menu)
+        self.setToolTip("Drag to move, double-click to rename, right-click for more")
+        self.setCursor(Qt.OpenHandCursor)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(COLOR_STRIP_WIDTH + 4, 0, 4, 1)
@@ -98,9 +104,9 @@ class ChannelRow(QWidget):
         layout.addWidget(self.visibility_button)
 
         self.label = QLabel(self)
-        self.label.setToolTip("Double-click to rename, right-click for more")
         self.label.setTextFormat(Qt.RichText)
-        self.label.mouseDoubleClickEvent = lambda _event: self.start_rename()  # type: ignore[assignment]
+        # the row takes the mouse over the name: a rich text label keeps the moves of a drag to itself
+        self.label.setAttribute(Qt.WA_TransparentForMouseEvents)
         layout.addWidget(self.label, 1)
 
         self.name_edit = QLineEdit(channel.channel_name, self)
@@ -184,6 +190,16 @@ class ChannelRow(QWidget):
             self._press = event.position()
         super().mousePressEvent(event)
 
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        self._press = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        if event.button() == Qt.LeftButton and event.position().x() > COLOR_STRIP_WIDTH + 3:
+            self.start_rename()
+            return
+        super().mouseDoubleClickEvent(event)
+
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt naming
         """Dragging a channel by its name moves it to another place."""
         press = getattr(self, "_press", None)
@@ -195,6 +211,7 @@ class ChannelRow(QWidget):
             drag = QDrag(self)
             drag.setMimeData(mime)
             drag.setPixmap(self.grab())
+            drag.setHotSpot(event.position().toPoint())
             drag.exec(Qt.MoveAction)
             return
         super().mouseMoveEvent(event)
@@ -255,6 +272,10 @@ class ChannelViewer(QWidget):
         self._layout.setSpacing(0)
         self._rows: list[ChannelRow] = []
         self.setAcceptDrops(True)
+        self.drop_line = QFrame(self)
+        self.drop_line.setFixedHeight(DROP_LINE_HEIGHT)
+        set_role(self.drop_line, "drop-line")
+        self.drop_line.hide()
 
         model.capture_changed.connect(self.rebuild)
         model.channels_changed.connect(self.refresh)
@@ -330,34 +351,59 @@ class ChannelViewer(QWidget):
             self.model.move_channel(channel, self.model.channels.index(shown[neighbour]))
             self.channels_changed.emit()
 
+    def _dragged(self, event) -> Optional[AnalyzerChannel]:
+        if not event.mimeData().hasFormat(CHANNEL_MIME):
+            return None
+        key = bytes(event.mimeData().data(CHANNEL_MIME)).decode("ascii")
+        return next((row.channel for row in self._rows if str(id(row.channel)) == key), None)
+
     def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        if event.mimeData().hasFormat(CHANNEL_MIME):
-            event.acceptProposedAction()
+        self.dragMoveEvent(event)
 
     def dragMoveEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        if event.mimeData().hasFormat(CHANNEL_MIME):
-            event.acceptProposedAction()
+        channel = self._dragged(event)
+        target = self.drop_target(channel, event.position().y()) if channel is not None else None
+        if target is None:
+            self.drop_line.hide()
+            event.ignore()
+            return
+        _index, y = target
+        self.drop_line.setGeometry(0, max(min(y - DROP_LINE_HEIGHT // 2, self.height() - DROP_LINE_HEIGHT), 0),
+                                   self.width(), DROP_LINE_HEIGHT)
+        self.drop_line.show()
+        self.drop_line.raise_()
+        event.acceptProposedAction()
+
+    def dragLeaveEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        self.drop_line.hide()
 
     def dropEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        key = bytes(event.mimeData().data(CHANNEL_MIME)).decode("ascii")
-        channel = next((row.channel for row in self._rows if str(id(row.channel)) == key), None)
-        if channel is None:
+        self.drop_line.hide()
+        channel = self._dragged(event)
+        target = self.drop_target(channel, event.position().y()) if channel is not None else None
+        if target is None:
+            event.ignore()
             return
-        target = self.row_index_at(event.position().y())
-        if target is not None:
-            self.model.move_channel(channel, target)
+        if self.model.move_channel(channel, target[0]):
             self.channels_changed.emit()
         event.acceptProposedAction()
 
-    def row_index_at(self, y: float) -> Optional[int]:
-        """The index (among all channels) of the shown row at ``y``, or after the last one."""
+    def drop_target(self, channel: AnalyzerChannel, y: float) -> Optional[tuple[int, int]]:
+        """Where ``channel`` dropped at ``y`` goes: its new index among all channels and the y of
+        the gap between the shown rows it goes into (the gap nearest to ``y``; hidden channels keep
+        their places)."""
         rows = self.visible_rows()
-        if not rows:
+        channels = self.model.channels
+        if not rows or channel not in channels:
             return None
+        others = [other for other in channels if other is not channel]
         for row in rows:
-            if y < row.geometry().bottom():
-                return self.model.channels.index(row.channel)
-        return self.model.channels.index(rows[-1].channel)
+            if y < row.geometry().center().y():
+                index = channels.index(channel) if row.channel is channel else others.index(row.channel)
+                return index, row.geometry().top()
+        last = rows[-1].channel
+        index = channels.index(channel) if last is channel else others.index(last) + 1
+        return index, rows[-1].geometry().bottom() + 1
 
     def _toggle_visibility(self, channel: AnalyzerChannel) -> None:
         channel.hidden = not channel.hidden

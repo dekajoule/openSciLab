@@ -22,6 +22,7 @@ What they sent on their UARTs, and their pins, go to the application with the po
 from __future__ import annotations
 
 import bisect
+import heapq
 import logging
 import threading
 
@@ -33,6 +34,8 @@ log = logging.getLogger(__name__)
 
 #: how far the timeline of a pin reaches back (seconds): ngspice may step back after a rejected step
 KEEP = 0.01
+#: a chip of a 6502 computer (``bus_chips.py``) changes its pins in a ramp this long (``boards.py``)
+RAMP = 2e-6
 
 
 class _PinState:
@@ -73,6 +76,55 @@ class _PinState:
         return None
 
 
+class _PortState:
+    """What a port of a chip did over time: (time, code) - the code holds its outputs and directions now and
+    before the change (``boards.port_code``), the chip's output stages ramp from one to the other."""
+
+    def __init__(self) -> None:
+        self.times: list[float] = [0.0]
+        self.codes: list[int] = [0]
+        self.out = self.ddr = 0
+
+    def add(self, time: float, out: int, ddr: int) -> None:
+        if (out, ddr) == (self.out, self.ddr):
+            return
+        code = out | (ddr << 8) | (self.out << 16) | (self.ddr << 24)
+        self.out, self.ddr = out, ddr
+        time = max(time, self.times[-1])
+        if time == self.times[-1] and len(self.times) > 1:
+            # (two changes at once: from what it was before the first to the last)
+            code = (code & 0xFFFF) | (self.codes[-1] & 0xFFFF0000)
+            self.codes[-1] = code
+            return
+        self.times.append(time)
+        self.codes.append(code)
+        if len(self.times) > 64 and self.times[-1] - self.times[0] > KEEP:
+            cut = bisect.bisect_left(self.times, self.times[-1] - KEEP)
+            del self.times[:max(cut - 1, 0)]
+            del self.codes[:max(cut - 1, 0)]
+
+    def rebase(self, now: float) -> None:
+        self.times = [now]
+        self.codes = [self.out | (self.ddr << 8) | (self.out << 16) | (self.ddr << 24)]
+
+    def next_change(self, after: float, until: float) -> float | None:
+        index = bisect.bisect_right(self.times, after)
+        if index < len(self.times) and self.times[index] <= until:
+            return self.times[index]
+        return None
+
+    def value(self, time: float) -> float:
+        """What its external source gives at ``time``: the code plus how far the ramp is (a fraction);
+        after the ramp the code of the new state alone (as if it had always been)."""
+        index = max(bisect.bisect_right(self.times, time) - 1, 0)
+        code = self.codes[index]
+        since = time - self.times[index]
+        if since >= RAMP or index == 0:
+            new = code & 0xFFFF
+            return float(new | (new << 16))
+        return code + max(since, 0.0) / RAMP * 0.999
+
+
 class _Running:
     def __init__(self, info: McuInfo, mcu: AvrMcu) -> None:
         self.info = info
@@ -80,6 +132,15 @@ class _Running:
         self.port_out: dict[str, int] = {}
         self.port_ddr: dict[str, int] = {}
         self.pins = {(pin.port, pin.bit): _PinState(pin) for pin in info.pins if not pin.analog_only}
+        #: a chip's ports (their output stages read them)
+        self.ports = {pin.port: _PortState() for pin in info.pins} if info.emulator == "chip" else {}
+        #: (time, port) of the changes since the co-simulation last looked (nets it carries follow them)
+        self.changed: list[tuple[float, str]] = []
+        #: port -> the nets the co-simulation carries on it
+        self.digital_ports: dict[str, set[str]] = {}
+        for pin in info.pins:
+            if pin.digital:
+                self.digital_ports.setdefault(pin.port, set()).add(pin.net.lower())
         self.analog = [pin for pin in info.pins if pin.adc is not None]
         #: what it sent, by UART ("0" is Serial, "1" Serial1 ...)
         self.serial: dict[str, bytearray] = {}
@@ -115,6 +176,10 @@ class _Running:
             else:
                 continue  # (EVENT_PIN of an older shim: not used)
             out, ddr = self.port_out.get(event.port, 0), self.port_ddr.get(event.port, 0)
+            port_state = self.ports.get(event.port)
+            if port_state is not None:
+                port_state.add(time, out, ddr)
+            self.changed.append((time, event.port))
             for bit in range(8):
                 state = self.pins.get((event.port, bit))
                 if state is None:
@@ -128,6 +193,8 @@ class _Running:
         self.time_offset = now - self.mcu.time
         for state in self.pins.values():
             state.rebase(now)
+        for port in self.ports.values():
+            port.rebase(now)
 
     def reset(self, now: float) -> None:
         """Start the firmware again at ngspice's time ``now``: the chip is as switched on - no pin drives,
@@ -139,6 +206,9 @@ class _Running:
         for state in self.pins.values():
             state.rebase(now, (0, False, False))
             state.input_level = None
+        for port in self.ports.values():
+            port.out = port.ddr = 0
+            port.rebase(now)
         self._resync = True
 
 
@@ -167,10 +237,15 @@ class CoSimulator:
 
     def _add(self, info: McuInfo) -> _Running | None:
         try:
-            mcu = AvrMcu(info.core, info.frequency, info.vcc)
+            if info.emulator == "chip":
+                from .bus_chips import create
+
+                mcu = create(info.core)
+            else:
+                mcu = AvrMcu(info.core, info.frequency, info.vcc)
             if info.firmware:
                 mcu.load_firmware(info.firmware)
-            else:
+            elif info.needs_firmware:
                 self.problems.append(f"{info.ref} has no firmware: it does nothing")
         except (CircuitError, OSError) as error:
             self.problems.append(f"{info.ref}: {error}")
@@ -181,7 +256,24 @@ class CoSimulator:
 
     def _bind_sources(self) -> None:
         self.sources = {}
+        #: the nets the co-simulation carries: net -> its pins (running, state) and its level
+        self.digital: dict[str, list] = {}
+        #: (time, net) of changes of drivers of those nets still to be carried
+        self._pending: list[tuple[float, str]] = []
+        self._first_carry = True
         for running in self.running.values():
+            for state in running.pins.values():
+                if state.pin.digital:
+                    self.digital.setdefault(state.pin.net.lower(), [[], False])[0].append((running, state))
+        for running in self.running.values():
+            if running.ports:
+                for state in running.pins.values():
+                    pin = state.pin
+                    port = running.ports[pin.port]
+                    if not pin.level:
+                        continue
+                    self.sources[pin.level.lower()] = (running, port, "code")
+                continue
             for state in running.pins.values():
                 pin = state.pin
                 self.sources[pin.level] = (running, state, "level")
@@ -199,6 +291,7 @@ class CoSimulator:
                 running.rebase(0.0)
         simulation.prepare = self._prepare
         simulation.on_point = self._point
+        simulation.extra_point = self._digital_values
         simulation.on_restart = self._restart
         self._watch(simulation)
 
@@ -266,11 +359,16 @@ class CoSimulator:
         end = time + delta
         self._advance(end)
         first = None
+        chip = False
         for running in self.running.values():
-            for state in running.pins.values():
+            for state in (running.ports.values() if running.ports else running.pins.values()):
                 change = state.next_change(time + 1e-12, end)
                 if change is not None and (first is None or change < first):
-                    first = change
+                    first, chip = change, bool(running.ports)
+        if first is not None and chip and first - time > 2e-9:
+            # (a chip's change: a point just before it, then one just after - the nets the co-simulation
+            # carries change sharply in the history, not along a long step)
+            return first - time - 1e-9
         if first is not None and first - time > 1e-9:
             return first - time + 1e-10
         return delta
@@ -282,6 +380,8 @@ class CoSimulator:
         running, state, which = found
         if time > running.mcu.time + running.time_offset:
             self._advance(time)
+        if which == "code":
+            return state.value(time)
         level, drives, pullup = state.at(time)
         if which == "level":
             return running.info.vcc if level else 0.0
@@ -289,16 +389,80 @@ class CoSimulator:
             return 1.0 if drives else 0.0
         return 1.0 if pullup else 0.0
 
+    def _level(self, entry: list, time: float) -> bool:
+        """The level of a net the co-simulation carries: of the pin that drives it, else as it was."""
+        for _running, state in entry[0]:
+            level, drives, _pullup = state.at(time)
+            if drives:
+                return bool(level)
+        return entry[1]
+
+    def _digital_values(self, time: float) -> tuple[list, list]:
+        """The nets the co-simulation carries, as volts at ngspice's ``time`` (for the history: probes)."""
+        if not self.digital:
+            return [], []
+        vcc = self.vcc
+        names = list(self.digital)
+        return names, [vcc if self._level(self.digital[name], time) else 0.0 for name in names]
+
+    def _collect(self, running: _Running) -> None:
+        """Note when the nets it carries may change: at the changes of the ports that drive them."""
+        if running.changed:
+            for when, port in running.changed:
+                for net in running.digital_ports.get(port, ()):
+                    heapq.heappush(self._pending, (when, net))
+            running.changed = []
+
+    def _carry(self, time: float) -> None:
+        """The nets the co-simulation carries take the levels their drivers have at ``time``; the chips that
+        read a changed one react (their outputs come later: their delays) - until nothing changes now."""
+        for running in self.running.values():
+            self._collect(running)
+        for _round in range(8):
+            touched = []
+            if self._first_carry:
+                due = list(self.digital)
+                self._first_carry = False
+            else:
+                due = []
+                while self._pending and self._pending[0][0] <= time:
+                    net = heapq.heappop(self._pending)[1]
+                    if net not in due:
+                        due.append(net)
+            for net in due:
+                entry = self.digital.get(net)
+                if entry is None:
+                    continue
+                level = self._level(entry, time)
+                entry[1] = level
+                for running, state in entry[0]:
+                    if state.states[-1][1] or state.input_level == level:
+                        continue  # (it drives the net itself, or knows the level)
+                    state.input_level = level
+                    running.mcu.set_input_at(time - running.time_offset, state.pin.port, state.pin.bit, level)
+                    if running not in touched:
+                        touched.append(running)
+            if not touched:
+                return
+            for running in touched:
+                running.mcu.update(time - running.time_offset)
+                running.apply_events(self._lock)
+                self._collect(running)
+
     def _point(self, time: float, latest: dict) -> None:
         self._time = time
+        if self.digital:
+            self._carry(time)
         for running in self.running.values():
             vcc = running.info.vcc
             high, low = 0.6 * vcc, 0.3 * vcc
+            reactive = getattr(running.mcu, "reactive", False)
+            local = time - running.time_offset
             for state in running.pins.values():
                 pin = state.pin
-                if state.states[-1][1]:
+                if pin.digital or state.states[-1][1]:
                     continue  # (an output: what the net does is the pin's own doing; set_input would be filtered)
-                value = latest.get(pin.net.lower())
+                value = latest.get(pin.net.lower()) if pin.net != "0" else 0.0
                 if value is None:
                     continue
                 volts = float(value.real if isinstance(value, complex) else value)
@@ -306,7 +470,13 @@ class CoSimulator:
                 if level is None or (level and volts < low) or (not level and volts > high):
                     level = volts > (high + low) / 2 if level is None else not level
                     state.input_level = level
-                    running.mcu.set_input(pin.port, pin.bit, level)
+                    if reactive:
+                        running.mcu.set_input_at(local, pin.port, pin.bit, level)
+                    else:
+                        running.mcu.set_input(pin.port, pin.bit, level)
+            if reactive:  # (a chip of a 6502 computer answers its inputs at once: its outputs follow)
+                running.mcu.update(local)
+                running.apply_events(self._lock)
             for pin in running.analog:
                 value = latest.get(pin.net.lower())
                 if value is not None:
@@ -319,7 +489,10 @@ class CoSimulator:
         with self._lock:
             for ref, running in self.running.items():
                 serial, running.serial = running.serial, {}
-                item = {"serial": bytes(serial.get("0", b"")), "state": running.mcu.state,
+                item = {"serial": bytes(serial.get("0", b"")),
+                        "state": getattr(running.mcu, "state_text", None) or running.mcu.state,
+                        **({"display": list(running.mcu.display_lines)} if hasattr(running.mcu, "display_lines")
+                           else {}),
                         "time": running.mcu.time,
                         "ports": {port: (running.port_out.get(port, 0), running.port_ddr.get(port, 0))
                                   for port in set(running.port_out) | set(running.port_ddr)}}
@@ -355,12 +528,14 @@ def attach(simulation, schematic, resolve, base_folder: str) -> list[str]:
     infos = getattr(simulation.circuit, "mcus", [])
     problems = []
     for info in infos:
-        if not info.firmware:
-            problems.append(f"{info.ref} has no firmware (choose a .hex or .elf file in the inspector)")
+        if not info.firmware and info.needs_firmware:
+            what = "an image (a .bin or .hex file)" if info.emulator == "chip" else "a .hex or .elf file"
+            problems.append(f"{info.ref} has no firmware (choose {what} in the inspector)")
     from . import avr
 
-    if infos and not avr.available():
+    avrs = [info for info in infos if info.emulator == "simavr"]
+    if avrs and not avr.available():
         problems.append("the AVR emulator is not installed: the microcontrollers do not run")
-        return problems
+        infos = [info for info in infos if info.emulator != "simavr"]
     simulation.mcus = list(infos)
     return problems

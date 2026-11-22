@@ -63,6 +63,8 @@ shortcuts) and `tests/test_node_audit.py` (nodes).
 
 ## Theme
 
+* Light by default (dark and "like the system" in *Settings → Appearance*). Menus are text only (no
+  icons: `Qt.AA_DontShowIconsInMenus`); tool bars and buttons have icons.
 * `token(name)` answers every colour: the palette of the shell (`TEXT`, `BORDER`, `ACCENT` …) and the
   tokens of the lab: `device.*` (state of a device), `type.*` (signal types: ports and wires),
   `group.*` (node groups: header tint, palette, minimap), `run.*` (state of a run), `trace.0-7`
@@ -71,6 +73,14 @@ shortcuts) and `tests/test_node_audit.py` (nodes).
 * Node groups are muted tints 20-25° of hue apart, signal types saturated colours: a node's group
   and the type of a port are never confused. Ports also differ by shape (round: values, square:
   signals, diamond: captures and tables, hexagon: devices).
+* The look follows macOS and Safari: the system blue as accent, soft greys for the window and its
+  bars, white cards, tiles and fields on them; tabs are rounded and the selected one is raised out of
+  its bar (`RAISED`), a field in a bar is filled grey (`FIELD`), menus are rounded and highlight in the
+  accent colour.
+* `RADIUS`: one scale of roundness - `small` 4 (marks in a control: check boxes, items of menus and
+  lists), `control` 6 (buttons, fields, tabs), `field` 8 (the search of the header), `card` 10 (cards,
+  banners, group boxes, menus), `window` 12 (tiles, floating windows); scaled with the text like the
+  spacing.
 * `space(n)`: steps of 4 px, scaled with the text size. `ICON`: `small` 12 (lists, tabs),
   `normal` 16 (buttons, tool bars), `large` 18 (tiles, headings), `activity` 20.
 * One typeface: Inter Tight (`theme.load_fonts`, the application's font); painted text derives its

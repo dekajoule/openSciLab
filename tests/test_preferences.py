@@ -17,16 +17,16 @@ from openscilab.ui import messages
 
 
 def test_defaults_bad_values_and_storage(tmp_path):
-    assert preferences.get("appearance.theme") == "dark" and preferences.get("navigation.wheel") == "zoom"
-    assert preferences.update({"appearance.theme": "light", "devices.refresh_s": 3}) == {
-        "appearance.theme": "light", "devices.refresh_s": 3.0}
+    assert preferences.get("appearance.theme") == "light" and preferences.get("navigation.wheel") == "zoom"
+    assert preferences.update({"appearance.theme": "dark", "devices.refresh_s": 3}) == {
+        "appearance.theme": "dark", "devices.refresh_s": 3.0}
     with pytest.raises(ValueError):
         preferences.update({"appearance.theme": "pink"})
     with pytest.raises(ValueError):
         preferences.update({"unknown": 1})
     preferences.reload()
-    assert preferences.get("appearance.theme") == "light"  # read back from the file
-    assert preferences.reset()["appearance.theme"] == "dark"
+    assert preferences.get("appearance.theme") == "dark"  # read back from the file
+    assert preferences.reset()["appearance.theme"] == "light"
     assert preferences.default_folder().endswith(os.path.join("Documents", "openSciLab"))
 
 
@@ -91,11 +91,11 @@ def test_recent_lists_keep_as_many_as_set(tmp_path):
 def test_the_light_theme(tmp_path):
     """A start with the light theme: light colours, the waveform display stays dark."""
     code = ("import openscilab.ui.theme as t; print(t.THEME_MODE, t.BACKGROUND, t.DISPLAY['BACKGROUND'], "
-            "'#1c1c20' in t.build_stylesheet())")
+            "'#1d1d1f' in t.build_stylesheet())")
     env = dict(os.environ, OPENSCILAB_THEME="light", OPENSCILAB_SETTINGS_DIR=str(tmp_path))
     output = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env,
                             cwd=os.path.dirname(os.path.dirname(__file__))).stdout.split()
-    assert output == ["light", "#f5f5f7", "#303033", "True"]
+    assert output == ["light", "#f7f7f9", "#1e1e20", "True"]
 
 
 def test_text_contrast_of_both_themes():

@@ -211,7 +211,7 @@ def test_simulation_dialog_builds_the_session(application):
 
 
 def test_main_window_simulates_without_a_board(application, monkeypatch, make_dataview):
-    from openscilab.ui.documents import dataview as main_window_module
+    from openscilab.ui.documents import dataview_capture as main_window_module
 
     class AcceptingDialog(SimulationDialog):
         def exec(self):

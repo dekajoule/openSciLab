@@ -1,0 +1,351 @@
+{
+  "Profiles": [
+    {
+      "Name": "W65C02 breadboard computer - Arduino Mega 2560 (Ben Eater's wiring)",
+      "CaptureSettings": {
+        "Frequency": 1000,
+        "PreTriggerSamples": 0,
+        "PostTriggerSamples": 2000,
+        "TotalSamples": 2000,
+        "LoopCount": 0,
+        "MeasureBursts": false,
+        "CaptureChannels": [
+          {
+            "TextualChannelNumber": "Channel 32",
+            "ChannelNumber": 31,
+            "ChannelName": "R/W",
+            "ChannelColor": 4286695300,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 31",
+            "ChannelNumber": 30,
+            "ChannelName": "PHI2",
+            "ChannelColor": 4286695300,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 9",
+            "ChannelNumber": 8,
+            "ChannelName": "/RES",
+            "ChannelColor": 4286695300,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 1",
+            "ChannelNumber": 0,
+            "ChannelName": "A0",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 3",
+            "ChannelNumber": 2,
+            "ChannelName": "A1",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 5",
+            "ChannelNumber": 4,
+            "ChannelName": "A2",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 7",
+            "ChannelNumber": 6,
+            "ChannelName": "A3",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 24",
+            "ChannelNumber": 23,
+            "ChannelName": "A4",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 22",
+            "ChannelNumber": 21,
+            "ChannelName": "A5",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 20",
+            "ChannelNumber": 19,
+            "ChannelName": "A6",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 18",
+            "ChannelNumber": 17,
+            "ChannelName": "A7",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 29",
+            "ChannelNumber": 28,
+            "ChannelName": "A8",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 42",
+            "ChannelNumber": 41,
+            "ChannelName": "A9",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 68",
+            "ChannelNumber": 67,
+            "ChannelName": "A10",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 66",
+            "ChannelNumber": 65,
+            "ChannelName": "A11",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 64",
+            "ChannelNumber": 63,
+            "ChannelName": "A12",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 62",
+            "ChannelNumber": 61,
+            "ChannelName": "A13",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 12",
+            "ChannelNumber": 11,
+            "ChannelName": "A14",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 10",
+            "ChannelNumber": 9,
+            "ChannelName": "A15",
+            "ChannelColor": 4283417591,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 23",
+            "ChannelNumber": 22,
+            "ChannelName": "D0",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 21",
+            "ChannelNumber": 20,
+            "ChannelName": "D1",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 19",
+            "ChannelNumber": 18,
+            "ChannelName": "D2",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 17",
+            "ChannelNumber": 16,
+            "ChannelName": "D3",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 43",
+            "ChannelNumber": 42,
+            "ChannelName": "D4",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 41",
+            "ChannelNumber": 40,
+            "ChannelName": "D5",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 67",
+            "ChannelNumber": 66,
+            "ChannelName": "D6",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 65",
+            "ChannelNumber": 64,
+            "ChannelName": "D7",
+            "ChannelColor": 4294948685,
+            "Hidden": false,
+            "Samples": null
+          },
+          {
+            "TextualChannelNumber": "Channel 63",
+            "ChannelNumber": 62,
+            "ChannelName": "SYNC",
+            "ChannelColor": 4286695300,
+            "Hidden": false,
+            "Samples": null
+          }
+        ],
+        "Bursts": null,
+        "TriggerType": 6,
+        "TriggerChannel": 0,
+        "TriggerInverted": false,
+        "TriggerBitCount": 0,
+        "TriggerPattern": 0,
+        "TriggerAnalogChannel": null,
+        "TriggerLevel": 0.0,
+        "AcquisitionMode": "stream",
+        "ThresholdVoltage": null,
+        "Continuous": false,
+        "ToDisk": false,
+        "TriggerSequence": null,
+        "SoftwareTrigger": false,
+        "ClockChannel": 30,
+        "ClockEdge": "falling",
+        "ClockName": "PHI2",
+        "Buses": [
+          {
+            "Name": "Address",
+            "Channels": [
+              0,
+              2,
+              4,
+              6,
+              23,
+              21,
+              19,
+              17,
+              28,
+              41,
+              67,
+              65,
+              63,
+              61,
+              11,
+              9
+            ],
+            "Format": "hex",
+            "Symbols": {},
+            "Color": 4283417591
+          },
+          {
+            "Name": "Data",
+            "Channels": [
+              22,
+              20,
+              18,
+              16,
+              42,
+              40,
+              66,
+              64
+            ],
+            "Format": "hex",
+            "Symbols": {},
+            "Color": 4294948685
+          }
+        ],
+        "AnalogChannels": [],
+        "StateTimes": null
+      },
+      "DecoderConfiguration": [
+        {
+          "decoder_id": "c64bus",
+          "label": "W65C02 bus",
+          "channel_map": {
+            "0": 3,
+            "1": 4,
+            "2": 5,
+            "3": 6,
+            "4": 7,
+            "5": 8,
+            "6": 9,
+            "7": 10,
+            "8": 11,
+            "9": 12,
+            "10": 13,
+            "11": 14,
+            "12": 15,
+            "13": 16,
+            "14": 17,
+            "15": 18,
+            "16": 19,
+            "17": 20,
+            "18": 21,
+            "19": 22,
+            "20": 23,
+            "21": 24,
+            "22": 25,
+            "23": 26,
+            "25": 0,
+            "27": 2,
+            "24": 1,
+            "34": 27
+          },
+          "options": {
+            "fmt": "hex",
+            "regions": "yes",
+            "read": "before falling edge",
+            "offset": 0,
+            "disasm": "yes",
+            "cpu": "W65C02S",
+            "map": "Ben Eater 6502 without ACIA"
+          },
+          "color_index": 0,
+          "enabled": true,
+          "parent": null
+        }
+      ],
+      "Notes": "An Arduino Mega 2560 with the openSciLab Arduino firmware at the W65C02 breadboard computer, wired after Ben Eater's 6502 monitor - as the profile \"C64 expansion port - Arduino Mega 2560\": the address bus on the even pins 22-52 (A0 on 22 ... A15 on 52), the data bus on the odd pins 31-45 (D0 on 31 ... D7 on 45), the clock PHI2 on D2 (captured, too), R/W on D3, /RES on D53 and SYNC (pin 7: the decoder marks the opcode fetches) on D47; GND to GND. The computer and the Mega both run at 5 V; the pins stay inputs. State capture: a frame per falling edge of PHI2 (D2 is the interrupt INT4), the buses Address and Data show each cycle as Ben Eater's monitor prints it; the decoder (W65C02S, the memory map of Ben Eater's computer) shows the cycles and disassembles the program. Without the hardware: a simulated Arduino Mega (arduino-sim:mega) with the signals scenario Circuit - the file examples/library/14-circuits/07-w65c02-computer/circuits/computer.circuit.yaml, wiring \"Arduino Mega (Ben Eater)\" - shows the simulated computer on these pins; the device then takes the circuit's time. All pins: R/W D3, PHI2 D2, /RES D53, A0 D22, A1 D24, A2 D26, A3 D28, A4 D30, A5 D32, A6 D34, A7 D36, A8 D38, A9 D40, A10 D42, A11 D44, A12 D46, A13 D48, A14 D50, A15 D52, D0 D31, D1 D33, D2 D35, D3 D37, D4 D39, D5 D41, D6 D43, D7 D45, SYNC D47."
+    }
+  ]
+}

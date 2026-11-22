@@ -1,0 +1,15 @@
+flow: Trace the 6502 bus
+description: "The computer runs firmware/hello.bin from its EEPROM (U3): a logic analyzer at its address and data bus, PHI2, R/W and SYNC (the probes LA1-LA27) captures its first 3 ms - the reset, the vector $8000 and the first instructions - and the 6502 decoder disassembles them. The check: the program writes $FF to DDRB (STA $6002)."
+nodes:
+  computer: {type: device.device, address: "circuit:circuits/computer.circuit.yaml", at: [0, 0]}
+  capture: {type: device.capture, channels: [A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, D0, D1, D2, D3, D4, D5, D6, D7, PHI2, RW, SYNC], rate: 200 kHz, duration: 3 ms, at: [288, 0]}
+  bus: {type: decoder.c64bus, channels: {a0: A0, a1: A1, a2: A2, a3: A3, a4: A4, a5: A5, a6: A6, a7: A7, a8: A8, a9: A9, a10: A10, a11: A11, a12: A12, a13: A13, a14: A14, a15: A15, d0: D0, d1: D1, d2: D2, d3: D3, d4: D4, d5: D5, d6: D6, d7: D7, phi2: PHI2, rw: RW, sync: SYNC}, cpu: W65C02S, map: Ben Eater 6502 without ACIA, text_row: Disassembly, at: [576, 0]}
+  code: {type: view.table, title: Bus cycles and instructions, at: [864, 0]}
+  ddrb: {type: control.compare, value: "STA $6002", operator: contains, at: [864, 224]}
+  check: {type: report.check, expected: 1, tolerance: 0, title: The program writes DDRB, at: [1152, 224]}
+edges:
+  - computer.device -> capture.device
+  - capture.capture -> bus.in
+  - bus.table -> code.in
+  - bus.text -> ddrb.a
+  - ddrb.result -> check.in

@@ -104,8 +104,10 @@ def test_channels_are_assigned_automatically_by_name(registry):
     fake_manager = SimpleNamespace(model=SimpleNamespace(channels=profile.capture_settings.capture_channels))
     DecoderManager._auto_assign_channels(fake_manager, info, instance)
 
-    # Every decoder channel finds its profile channel, none falls back to "first free".
-    assert len(instance.channel_map) == len(info.channels)
+    # Every decoder channel finds its profile channel, none falls back to "first free" (but SYNC:
+    # the 6510 of the C64 has none)
+    assert len(instance.channel_map) == len(info.channels) - 1
+    assert [channel.id for channel in info.channels if channel.index not in instance.channel_map] == ["sync"]
     stored = next(item for item in profile.decoder_configuration if item["decoder_id"] == "c64bus")
     assert instance.channel_map == {int(key): value for key, value in stored["channel_map"].items()}
 
@@ -139,7 +141,7 @@ def test_bus_cycles_are_decoded_with_the_profile_configuration(registry):
     assert values("unstable") == []
     # Three cycles are no program: the Disassembly row explains why it is empty.
     (hint,) = segments_of(group, "interrupt")
-    assert hint.values[0].startswith("No disassembly: the program flow could not be followed")
+    assert hint.values[0].startswith("No disassembly: 3 bus cycles are too few to follow the program")
     assert (hint.first_sample, hint.last_sample) == (10, 70)
 
 
@@ -306,3 +308,107 @@ def test_bus_cycles_keep_the_value_in_the_short_texts(registry):
     assert segments_of(group, "read")[0].values == ("R $FFFC = $E2", "R $FFFC=$E2", "FFFC=E2", "E2", "R")
     (write,) = segments_of(group, "write")
     assert write.values == ("W $D020 = $06", "W $D020=$06", "D020=06", "06", "W")
+
+
+def coarse_timing_capture(cycles: int, program=None, fetches=None):
+    """The 6510 model (or ``program``: address, data, read) as an Arduino Mega samples a slow 6502
+    (the Mega profile as a timing capture, Φ2 on channel 30): 1 kHz, 24 samples per cycle, the
+    address of the next cycle already at the sample of the falling Φ2 edge. With ``fetches`` (the
+    cycles of the program that fetch an opcode) SYNC on D23 (channel 1)."""
+    from openscilab.core import c64_model
+
+    program = [(0xFFFF, 0xFF, True, False)] * 3 + (c64_model.run_program()[:cycles] if program is None
+                                                   else list(program))
+    cycle, half = 24, 12
+    count = len(program) * cycle
+    position = np.arange(count)
+    clock = ((position % cycle) >= half).astype(np.uint8)  # each cycle starts with Φ2 falling
+    address = np.repeat([item[0] for item in program], cycle)
+    read = np.repeat([1 if item[2] else 0 for item in program], cycle).astype(np.uint8)
+    data = np.repeat([item[1] for item in program], cycle)
+    data = np.concatenate(([0xFF] * half, data[:-half]))  # driven in the high phase, held into the next cycle
+    profile = read_profiles_file(os.path.join(PROJECT_DIRECTORY, "examples", "profiles", "c64-arduino-mega.json"))[0]
+    channels = []
+    for channel in profile.capture_settings.capture_channels:
+        name = channel.channel_name
+        if name.startswith("A") and name[1].isdigit():
+            samples = (address >> int(name[1:name.index(" ")])) & 1
+        elif name.startswith("D") and name[1].isdigit():
+            samples = (data >> int(name[1:name.index(" ")])) & 1
+        else:
+            samples = {"R/W (5)": read, "Φ2 (E)": clock}.get(name, np.ones(count))
+        channels.append(AnalyzerChannel(channel_number=channel.channel_number, channel_name=name,
+                                        samples=np.asarray(samples, dtype=np.uint8)))
+    if fetches is not None:  # high from the edge before the fetch cycle to the edge after it, as the CPU drives it
+        sync = np.repeat([1 if number - 3 in fetches else 0 for number in range(len(program))], cycle)
+        channels.append(AnalyzerChannel(channel_number=1, channel_name="SYNC",
+                                        samples=np.concatenate(([0] * half, sync[:-half])).astype(np.uint8)))
+    session = CaptureSession(frequency=1000, pre_trigger_samples=0, post_trigger_samples=count)
+    session.capture_channels = channels
+    return session, profile
+
+
+def test_a_slow_6502_in_a_coarse_timing_capture_is_disassembled(registry):
+    session, profile = coarse_timing_capture(80)
+    provider = SigrokProvider(registry)
+    provider.load_configuration(profile.decoder_configuration)
+    (group,) = provider.run(session)
+    rows = {row.name: row.segments for row in group.annotations}
+    assert [segment.values[0] for segment in rows["Disassembly"][:3]] == [
+        "RESET → $C000", "$C000  CLI", "$C001  LDX #$00"]
+    assert not rows.get("Warnings")  # the address changing at the edge sample is the next cycle
+
+
+def test_too_few_cycles_are_named_as_the_reason(registry):
+    session, profile = coarse_timing_capture(2)  # 120 samples at 1 kHz, as the capture of 100 samples
+    provider = SigrokProvider(registry)
+    provider.load_configuration(profile.decoder_configuration)
+    (group,) = provider.run(session)
+    (hint,) = next(row.segments for row in group.annotations if row.name == "Disassembly")
+    assert hint.values[0].startswith("No disassembly: 4 bus cycles are too few")  # (the first one starts late)
+
+
+@pytest.mark.parametrize("sync", [False, True])
+def test_a_w65c02s_of_ben_eaters_computer(registry, sync):
+    """CPU W65C02S and the memory map of Ben Eater's computer; SYNC, when it is assigned, marks the
+    opcode fetches (and is assigned by its name)."""
+    from test_c64_disassembler import CMOS_PROGRAM, CMOS_TEXTS, FETCHES
+
+    from openscilab.ui.widgets.decoder_manager import refit_channels_by_name
+
+    session, profile = coarse_timing_capture(0, [(a, d, r, False) for a, d, r in CMOS_PROGRAM],
+                                             FETCHES if sync else None)
+    provider = SigrokProvider(registry)
+    provider.load_configuration(profile.decoder_configuration)
+    instance = provider.instances[0]
+    info = provider.info_for(instance)
+    instance.options.update({"cpu": "W65C02S", "map": "Ben Eater 6502"})
+    if sync:
+        sync_index = next(channel.index for channel in info.channels if channel.id == "sync")
+        instance.channel_map[sync_index] = 99  # (a profile of another device) found by its name
+        assert refit_channels_by_name(info, instance, session.capture_channels)
+        assert instance.channel_map[sync_index] == 1
+    (group,) = provider.run(session)
+    rows = {row.name: row.segments for row in group.annotations}
+    assert [segment.values[0] for segment in rows["Disassembly"]][:len(CMOS_TEXTS)] == CMOS_TEXTS
+    regions = [segment.values[1] for segment in rows["Memory region"]]
+    assert {"ROM", "Zero page", "Stack", "VIA ORB"} <= set(regions) and "KERNAL" not in regions
+
+
+def test_ben_eaters_computer_without_the_acia(registry):
+    """The map without the ACIA: $4000-$5FFF free, the VIA registers named (mirrored over
+    $6000-$7FFF) with what they do on the board."""
+    from test_c64_disassembler import CMOS_PROGRAM
+
+    program = [(a, d, r, False) for a, d, r in CMOS_PROGRAM]
+    program[12] = (0x6011, 0x42, 1, False)  # (LDA ($20) on a mirror of ORA)
+    session, profile = coarse_timing_capture(0, program)
+    provider = SigrokProvider(registry)
+    provider.load_configuration(profile.decoder_configuration)
+    provider.instances[0].options.update({"cpu": "W65C02S", "map": "Ben Eater 6502 without ACIA"})
+    (group,) = provider.run(session)
+    regions = {segment.values[1]: segment.values[0]
+               for row in group.annotations if row.name == "Memory region" for segment in row.segments}
+    assert regions["VIA ORA"] == "6522 VIA Output register A: PA5-PA7 LCD RS, R/W, E; PA0-PA3 LEDs D2-D5"
+    assert regions["VIA ORB"].endswith("LCD data DB0-DB7")
+    assert regions["RES vec"].startswith("Reset vector") and "ACIA" not in regions

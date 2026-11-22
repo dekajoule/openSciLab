@@ -37,7 +37,9 @@ kinds.register("remote-sim", instrument=open_simulated, title="Simulated remote 
 
 def setup_ui() -> None:
     from ..ui.devices import register_backend
-    from ..ui.devices.remote import RemoteBackend, RemoteSimulatorBackend
+    from ..ui.devices.remote import RemoteBackend, RemoteServer, RemoteSimulatorBackend
+    from ..ui.sections import register_extension
 
     register_backend(RemoteBackend())
     register_backend(RemoteSimulatorBackend())
+    register_extension("remote-server", RemoteServer)  # the server remote devices connect to

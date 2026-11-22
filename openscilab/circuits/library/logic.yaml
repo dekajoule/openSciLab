@@ -143,6 +143,37 @@
   spice: "{ref:A} {pin.1} {pin.2} {ref}_model"
   definitions: [".model {ref}_model d_inverter(rise_delay={delay} fall_delay={delay})"]
 
+- type: gate.schmitt
+  title: Schmitt-trigger inverter
+  category: Logic
+  prefix: U
+  keywords: schmitt trigger inverter hysteresis not gate 7414 74HC14 debounce
+  description: "An inverter with hysteresis (74HC14): low once its input rises above the upper threshold, high once it falls below the lower one - in between it keeps its level, so slow or noisy edges (a 555, an RC debounce) switch it once."
+  symbol:
+    shapes:
+      - {line: [-20, -16, -20, 16, 12, 0, -20, -16]}
+      - {circle: [16, 0, 4]}
+      - {line: [-14, 4, -6, 4, -6, -4]}
+      - {line: [-10, 4, -10, -4, -2, -4]}
+    pins:
+      - {number: "1", name: A, at: [-40, 0], angle: 0, length: 20, kind: input}
+      - {number: "2", name: Y, at: [40, 0], angle: 180, length: 20, kind: output}
+    reference: {at: [0, -24]}
+    value: false
+    pin_names: false
+  params:
+    - {name: vt_pos, label: Upper threshold, unit: V, default: 2.7 V, description: "The input voltage above which the output goes low (74HC14 at 5 V: 2.7 V)."}
+    - {name: vt_neg, label: Lower threshold, unit: V, default: 1.6 V, description: "The input voltage below which the output goes high (74HC14 at 5 V: 1.6 V)."}
+    - {name: high, label: High level, unit: V, default: 5 V, description: The voltage of its output when high (its supply).}
+    - {name: delay, label: Delay, unit: s, default: 10 ns, min: 1 ps, description: The time from an input to the output.}
+  show: []
+  spice: |
+    {ref:B}q {ref}_qn 0 V = V({pin.1}) > {vt_pos} ? 0 : (V({pin.1}) < {vt_neg} ? 1 : (V({ref}_q) > 0.5 ? 1 : 0))
+    {ref:R}q {ref}_qn {ref}_q 1k
+    {ref:C}q {ref}_q 0 {{delay/1000}}
+    {ref:B}o {ref}_o 0 V = V({ref}_q)*{high}
+    {ref:R}o {ref}_o {pin.2} 50
+
 - type: gate.buffer
   title: Buffer
   category: Logic

@@ -247,7 +247,9 @@ def test_state_analysis_resamples_on_a_clock(window, monkeypatch):
     timing = window.model.session
     window.state_analysis()
     session = window.model.session
-    assert session.clock_channel is None
+    # the states keep their clock (for decoders that wait for its edges); a repeated capture the timing
+    assert session.clock_channel == timing.capture_channels[0].channel_number
+    assert window.captured_session is timing
     # Every channel keeps its place, so the decoders still find theirs
     assert session.channel_numbers == timing.channel_numbers
     # The other channels change with the rising edges of channel 1 (period 4): one state per

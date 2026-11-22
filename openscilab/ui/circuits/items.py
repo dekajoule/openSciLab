@@ -308,6 +308,8 @@ class ComponentItem(QGraphicsObject):
         self.live_values: dict[str, str] = {}
         #: an oscilloscope's picture on its symbol: (channel index, [(x, y) as shares of its screen])
         self.scope_traces: list = []
+        #: a character display's lines while the circuit runs (``display`` of its kind: its window)
+        self.display_lines: list[str] = []
         #: the current view: the current through it, pin 1 to pin 2 (two-pin components)
         self.flows: list[Flow] = []
         #: while the circuit runs: the colours of the voltages at its pins (pin number -> colour)
@@ -360,6 +362,30 @@ class ComponentItem(QGraphicsObject):
         if self._outline is None:
             self._outline = self._compute_outline()
         return self._outline
+
+    def set_display(self, lines: list[str]) -> None:
+        """What a character display shows now (``[]``: nothing - the circuit does not run)."""
+        lines = [str(line) for line in lines or []]
+        if lines != self.display_lines:
+            self.display_lines = lines
+            self.update()
+
+    def _paint_display(self, painter: QPainter, window) -> None:
+        x1, y1, x2, y2 = (float(value) for value in window[:4])
+        columns = int(window[4]) if len(window) > 4 else 16
+        rows = int(window[5]) if len(window) > 5 else 2
+        corners = [self._t(x1, y1), self._t(x2, y2)]
+        box = QRectF(corners[0], corners[1]).normalized()
+        painter.fillRect(box, qcolor("circuit.lcd"))
+        cell_width = box.width() / max(columns, 1)
+        cell_height = box.height() / max(rows, 1)
+        size = min(cell_height * 0.8, cell_width * 1.5)
+        color = qcolor("circuit.lcd.text")
+        for row, line in enumerate(self.display_lines[:rows]):
+            for column, character in enumerate(line[:columns]):
+                if character.strip():
+                    draw_text(painter, character, box.left() + (column + 0.5) * cell_width,
+                              box.top() + (row + 0.5) * cell_height, size, color=color)
 
     def set_live(self, text: str, glow: float) -> None:
         """What it shows while the circuit runs: a reading instead of its value, an LED's brightness."""
@@ -500,6 +526,10 @@ class ComponentItem(QGraphicsObject):
                 # (separate lines: a polyline jumping up and down is many times slower, see scope.trace_segments)
                 painter.drawLines([QLineF(a, b) for a, b in zip(corners, corners[1:])])
             painter.restore()
+        # a character display shows its text in its window, a character in each cell
+        window = spec.extra.get("display")
+        if self.display_lines and window:
+            self._paint_display(painter, window)
         # LEDs light with their current
         if self.glow > 0.01:
             glow = QColor(qcolor("circuit.current"))

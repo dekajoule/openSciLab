@@ -17,6 +17,10 @@ the sidebar (beside *Project* and *Devices*), and kinds of documents - files wit
         register_section("notes", "Notes", "book", NotesSection, shortcut="Ctrl+Shift+M")
         register_document_type("note", "Note", (".note.txt",), open_note, new_note, folder="notes")
 
+A plugin that runs something while a window is open - a server, a watcher - registers an
+*extension* (:func:`register_extension`): the window builds it and tells it when the settings change
+and when it closes.
+
 The window gives the factories a :class:`~openscilab.ui.shell.services.ShellServices`, never itself:
 what a section may ask of the shell (open a file, show a document, the active project ...).
 Windows created afterwards show what was registered.
@@ -104,8 +108,28 @@ class DocumentType:
         return max(found, key=len) if found else None
 
 
+@dataclass(frozen=True)
+class ExtensionSpec:
+    """Something a plugin runs while a window is open (the server of remote devices, a watcher).
+
+    ``factory(services)`` builds it for one window. What it returns may have the methods
+    ``preferences_changed(changes: dict)`` (the keys of the settings that changed, with their new
+    values) and ``close()`` (the window closes); both are optional.
+    """
+
+    key: str
+    factory: Callable[[ShellServices], object]
+    #: the module that registered it
+    module: str = ""
+
+    @property
+    def builtin(self) -> bool:
+        return self.module.startswith("openscilab.")
+
+
 _sections: dict[str, SectionSpec] = {}
 _types: dict[str, DocumentType] = {}
+_extensions: dict[str, ExtensionSpec] = {}
 
 
 def _module_of(*functions: Callable | None) -> str:
@@ -166,6 +190,26 @@ def register_document_type(kind: str, title: str, suffixes, open: Callable[[str,
 
         project.register_folder(folder, spec.module)
     return spec
+
+
+def register_extension(key: str, factory: Callable[[ShellServices], object], module: str = "") -> ExtensionSpec:
+    """Run ``factory(services)`` in every window created afterwards (see :class:`ExtensionSpec`)."""
+    if not _KEY.match(key or ""):
+        raise ValueError(f"{key!r} is no key of an extension: lower case letters, digits, '_', '-', '.'")
+    if not callable(factory):
+        raise TypeError("the factory of an extension must be callable")
+    spec = ExtensionSpec(key, factory, module or _module_of(factory))
+    existing = _extensions.get(key)
+    if existing is not None and existing.builtin and not spec.builtin:
+        raise ValueError(f"the extension {key!r} is one of openSciLab's own")
+    _extensions[key] = spec
+    return spec
+
+
+def extensions() -> list[ExtensionSpec]:
+    """The extensions of the plugins, openSciLab's own first."""
+    specs = list(_extensions.values())
+    return [spec for spec in specs if spec.builtin] + [spec for spec in specs if not spec.builtin]
 
 
 def sections() -> list[SectionSpec]:
@@ -234,6 +278,9 @@ def unregister_module(module_name: str) -> None:
     for spec in added_types:
         _types.pop(spec.kind, None)
         project.unregister_folders(spec.module)
+    for key in [key for key, spec in _extensions.items()
+                if spec.module == module_name or spec.module.startswith(module_name + ".")]:
+        _extensions.pop(key)
 
 
 def open_dialog_filter(builtin: str) -> str:

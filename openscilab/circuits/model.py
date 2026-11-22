@@ -100,6 +100,7 @@ SETTINGS = {
     "tolerance": "0.001",  # the relative error ngspice allows (reltol): larger is faster, less exact
     "speed": "1",          # live in real time: simulated seconds per second
     "start": "settled",    # settled: from its operating point; power on: every capacitor empty (as switched on)
+    "logic_edge": "1 ns",  # the rise and fall time of the outputs of logic gates: longer is faster (fewer steps)
 }
 #: settings with a choice of words instead of a value
 SETTING_CHOICES = {"start": ("settled", "power on")}

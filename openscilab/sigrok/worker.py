@@ -182,7 +182,28 @@ class DecodeService:
 
     def run(self, provider, session: CaptureSession, cancelled: Optional[Callable[[], bool]] = None) -> list:
         """The annotation groups of ``provider`` over ``session`` (blocks; call it from a worker
-        thread). Raises ``RuntimeError`` when the decoder process ended in the middle."""
+        thread). Raises ``RuntimeError`` when the decoder process ended in the middle.
+
+        A decoder assigned to the clock of a state capture (:func:`~..core.state_mode.state_clock`)
+        decodes the states with the clock drawn in; its annotations are given back on the states."""
+        from ..core.state_mode import clocked_states, state_clock, state_of_clocked
+
+        clock = state_clock(session)
+        if clock is None or not any(instance.enabled and clock.channel_number in instance.channel_map.values()
+                                    for instance in provider.instances):
+            return self._run(provider, session, cancelled)
+        count = session.sample_count()
+        groups = self._run(provider, clocked_states(session), cancelled)
+        for group in groups:
+            for annotation in group.annotations:
+                annotation.segments = [segment._replace(
+                    first_sample=state_of_clocked(segment.first_sample, count),
+                    last_sample=state_of_clocked(segment.last_sample, count),
+                    sample_point=None if segment.sample_point is None
+                    else state_of_clocked(segment.sample_point, count)) for segment in annotation.segments]
+        return groups
+
+    def _run(self, provider, session: CaptureSession, cancelled: Optional[Callable[[], bool]] = None) -> list:
         from .engine import Annotation, AnnotationSegment
         from .provider import AnnotationGroup
 

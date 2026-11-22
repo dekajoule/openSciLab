@@ -1,0 +1,41 @@
+circuit: W65C02 address decoder
+description: 'The address decoding of the W65C02 computer (U5, a 74HC00), simulated: set the address lines A15, A14 with the switches (closed = 1) while PHI2 runs at 1 kHz. With A15 = 0, A14 = 1 (the VIA at $6000, A13 = 1 is its CS1) /VIA_CS is low, /A15 (the ROM''s /CE) high and /RAM_CS follows PHI2 - the RAM''s /OE (A14) keeps it off the bus.'
+version: 1
+settings: {step: 10 us}
+components:
+  SW1: {type: switch, at: [-300, -60], rotation: 270, params: {state: '0'}}
+  PWR1: {type: power, at: [-300, -90], params: {net: +5V, voltage: 5 V}}
+  R1: {type: resistor, at: [-300, 80], rotation: 90, params: {value: 10k}}
+  GND1: {type: ground, at: [-300, 110]}
+  SW2: {type: switch, at: [-160, -60], rotation: 270, params: {state: '1'}}
+  PWR2: {type: power, at: [-160, -90], params: {net: +5V, voltage: 5 V}}
+  R2: {type: resistor, at: [-160, 80], rotation: 90, params: {value: 10k}}
+  GND2: {type: ground, at: [-160, 110]}
+  V1: {type: source.square, at: [-20, 220], params: {frequency: 1 kHz}}
+  GND3: {type: ground, at: [-20, 250]}
+  U5A: {type: gate.nand, at: [120, -150], comment: '74HC00 gate 1: pins 1, 2 -> 3 (an inverter)'}
+  U5B: {type: gate.nand, at: [120, -60], comment: '74HC00 gate 2: pins 4, 5 -> 6'}
+  U5C: {type: gate.nand, at: [120, 30], comment: '74HC00 gate 3: pins 9, 10 -> 8'}
+  P1: {type: probe.logic, at: [400, -150], params: {name: ROM_CE}}
+  P2: {type: probe.logic, at: [400, -60], params: {name: RAM_CS}}
+  P3: {type: probe.logic, at: [400, 30], params: {name: VIA_CS}}
+wires:
+  - [[-300, -30], [-300, 50]]
+  - [[-160, -30], [-160, 50]]
+  - [[320, -150], [400, -150]]
+  - [[320, -60], [400, -60]]
+  - [[320, 30], [400, 30]]
+  - [[80, 40], [-160, 40]]
+  - [[80, -140], [-250, -140], [-250, -20], [-300, -20]]
+  - [[80, -160], [70, -160], [70, -140]]
+  - [[160, -150], [320, -150]]
+  - [[80, -50], [60, -50], [60, -120], [170, -120], [170, -150]]
+  - [[80, 20], [70, 20], [70, -50]]
+  - [[160, -60], [320, -60]]
+  - [[160, 30], [320, 30]]
+  - [[80, -70], [-20, -70], [-20, 190]]
+labels: []
+groups:
+  - {name: Address lines, comment: 'switches set A15 and A14 (closed = 1, the resistors pull open ones to 0); PHI2 at 1 kHz stands in for the clock', color: green, members: [SW1, PWR1, R1, w1, GND1, SW2, PWR2, R2, w2, GND2, V1, GND3]}
+  - {name: Address decoding, comment: '74HC00: ROM A15 = 1, RAM A15 = 0 and PHI2, VIA A15 = 0, A14 = 1', color: yellow, members: [U5A, U5B, U5C]}
+  - {name: Measure, comment: 'the chip selects (active low): the flow checks them for the address $6000', color: blue, members: [w3, P1, w4, P2, w5, P3]}

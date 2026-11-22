@@ -79,6 +79,10 @@ class ShellServices(QObject):
     def show_settings(self, page: str = "") -> None:
         self._shell.show_preferences(page)
 
+    def refresh_devices(self) -> None:
+        """List the devices again in the Devices section (a device came or went)."""
+        self._shell.devices_section.refresh()
+
     def show_data(self, instrument) -> QWidget:
         """A data view of ``instrument`` (of the hub)."""
         return self._shell.show_data(instrument)

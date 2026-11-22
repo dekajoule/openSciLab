@@ -57,18 +57,20 @@ def remember_circuit(uri: str, **values) -> None:
     settings.persist_settings(CIRCUIT_FILE, data)
 
 
-def apply_stored(instrument: Instrument) -> None:
-    """Give a simulator the signals, wires, USB link and drift it had last time."""
+def apply_stored(instrument: Instrument, uri: str = "") -> None:
+    """Give a simulator the signals, wires, USB link and drift it had last time (those of ``uri``,
+    by default its own address)."""
     simulation = instrument.simulation
     if simulation is None:
         return
-    config = stored_signals(instrument.uri)
+    uri = uri or instrument.uri
+    config = stored_signals(uri)
     if config:
         try:
             simulation.apply_signals(config)
         except scenarios.ScenarioError:
             pass  # e.g. a capture file that is gone: the test signals of the profile
-    stored = stored_circuit(instrument.uri)
+    stored = stored_circuit(uri)
     if "usb" in stored:
         try:
             simulation.set_usb(stored["usb"] or None)
@@ -81,6 +83,18 @@ def apply_stored(instrument: Instrument) -> None:
             simulation.set_wiring(list(stored["wiring"]))
         except (TypeError, ValueError):
             pass  # a pin of another profile: the wires of the profile
+
+
+def share_simulation(driver, model: Instrument, address: str) -> None:
+    """The device model behind a protocol shell (``arduino-sim:``, ``rigol-sim:``) simulates what it
+    did last time at ``address``, and the instrument of ``driver`` gets its simulation: the *Signals*
+    and *Events* tabs, faults and wires as with ``sim:`` - the device stays the real driver."""
+    from .facets import SimulationControl
+
+    apply_stored(model, address)
+    control = SimulationControl(model.simulated_driver)
+    own = driver.instrument_facets
+    driver.instrument_facets = lambda: own() + [control]
 
 
 def open_stored(address: str, clock: Optional[Callable[[], float]] = None) -> Instrument:

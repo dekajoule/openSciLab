@@ -21,9 +21,11 @@ loop back or an RC filter) stays as it is.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from ...core import units
 from .facets import DacSource
 from .circuit import (
     Alias,
@@ -48,6 +50,22 @@ class ScenarioError(ValueError):
     """The scenario does not fit the device, or a parameter is wrong."""
 
 
+#: the defaults leave every step of a signal (a count, a clock period, a bit) at least this many
+#: samples at the highest rate of the device: what it simulates can be captured
+SAMPLES_PER_STEP = 10
+#: baud rates a default UART takes (the highest that fits the device)
+STANDARD_BAUDS = (300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200)
+
+
+def _round_down(value: float) -> float:
+    """The largest 1, 2 or 5 × 10ⁿ up to ``value``."""
+    exponent = math.floor(math.log10(value))
+    for mantissa in (5, 2, 1):
+        if mantissa * 10 ** exponent <= value * (1 + 1e-9):
+            return float(mantissa * 10 ** exponent)
+    return float(10 ** exponent)
+
+
 @dataclass(frozen=True)
 class ScenarioParam:
     name: str
@@ -56,6 +74,22 @@ class ScenarioParam:
     #: "text", "quantity" (a number with a unit), "channel" (1 = the first channel) or "path"
     kind: str = "text"
     unit: str = ""
+    #: the default follows the highest rate of the device: "rate" (a step rate in Hz) or "baud"
+    scaled: str = ""
+
+    def default_for(self, max_rate: float = 0.0) -> Any:
+        """The default for a device that samples at most at ``max_rate`` (0: the default as it is):
+        no faster than its captures can show (:data:`SAMPLES_PER_STEP`)."""
+        if not self.scaled or max_rate <= 0:
+            return self.default
+        limit = max_rate / SAMPLES_PER_STEP
+        if self.scaled == "baud":
+            fitting = [baud for baud in STANDARD_BAUDS if baud <= min(limit, float(self.default))]
+            return fitting[-1] if fitting else STANDARD_BAUDS[0]
+        default = units.parse(self.default, self.unit)
+        if limit >= default:
+            return self.default
+        return units.format_quantity(_round_down(limit), self.unit)
 
 
 @dataclass(frozen=True)
@@ -68,8 +102,9 @@ class Scenario:
     params: tuple[ScenarioParam, ...] = ()
     min_channels: int = 1
 
-    def defaults(self) -> dict[str, Any]:
-        return {param.name: param.default for param in self.params}
+    def defaults(self, max_rate: float = 0.0) -> dict[str, Any]:
+        """The defaults of its parameters for a device sampling at most at ``max_rate`` (0: as written)."""
+        return {param.name: param.default_for(max_rate) for param in self.params}
 
 
 _ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "\\": "\\"}
@@ -173,6 +208,33 @@ def _c64(nets: list[str], params: dict) -> tuple[dict, dict]:
     return sources, names
 
 
+#: how a logic analyzer is wired to a 6502 computer: (its pin, the circuit's net or probe). An Arduino
+#: Mega after Ben Eater's 6502 monitor (as the profile "C64 expansion port - Arduino Mega 2560"): the
+#: address bus on the even pins 22-52 (A0 on 22), the data bus on the odd pins 31-45 (D0 on 31), Φ2 on D2
+#: (the clock input of the state mode), R/W on D3, the reset on D53 - and the selects and SYNC on free pins.
+WIRINGS: dict[str, tuple[tuple[str, str], ...]] = {
+    "Arduino Mega (Ben Eater)": tuple((f"D{22 + 2 * bit}", f"A{bit}") for bit in range(16))
+    + tuple((f"D{31 + 2 * bit}", f"D{bit}") for bit in range(8))
+    + (("D2", "PHI2"), ("D3", "RW"), ("D53", "RESB"), ("D23", "RAM_CS"), ("D25", "VIA_CS"), ("D27", "ROM_CE"),
+       ("D29", "IRQB"), ("D47", "SYNC")),
+}
+
+
+def _circuit(nets: list[str], params: dict) -> tuple[dict, dict]:
+    path = str(params.get("path", "")).strip()
+    if not path:
+        raise ScenarioError("choose the circuit file (a .circuit.yaml)")
+    wiring = WIRINGS.get(str(params.get("wiring", "")))
+    if wiring is None:
+        raise ScenarioError(f"unknown wiring {params.get('wiring')!r} (known: {', '.join(WIRINGS)})")
+    missing = [pin for pin, _net in wiring if pin not in nets]
+    if missing:
+        raise ScenarioError(f"the wiring needs the pins {', '.join(missing[:6])} - an Arduino Mega has them")
+    sources = {pin: {"type": "circuit", "path": path, "net": net} for pin, net in wiring}
+    names = {nets.index(pin): net for pin, net in wiring}
+    return sources, names
+
+
 def _file(nets: list[str], params: dict) -> tuple[dict, dict]:
     from .circuit import _capture_file
 
@@ -199,20 +261,26 @@ SCENARIOS: dict[str, Scenario] = {scenario.key: scenario for scenario in (
              "clock, UART, … and its wiring.", _default),
     Scenario("uart", "UART", "8N1 frames of a text on one channel, repeated.", _uart, (
         ScenarioParam("text", "Text", "openSciLab\\n"),
-        ScenarioParam("baud", "Baud rate", 115200, "quantity"),
+        ScenarioParam("baud", "Baud rate", 115200, "quantity", scaled="baud"),
         ScenarioParam("channel", "Channel", 1, "channel"))),
     Scenario("spi", "SPI", "Clock, MOSI and chip select on three channels in a row.", _spi, (
-        ScenarioParam("frequency", "Step rate", "1 MHz", "quantity", "Hz"),
+        ScenarioParam("frequency", "Step rate", "1 MHz", "quantity", "Hz", scaled="rate"),
         ScenarioParam("channel", "First channel", 1, "channel")), min_channels=3),
     Scenario("i2c", "I²C", "SCL and SDA on two channels in a row.", _i2c, (
-        ScenarioParam("frequency", "Step rate", "1 MHz", "quantity", "Hz"),
+        ScenarioParam("frequency", "Step rate", "1 MHz", "quantity", "Hz", scaled="rate"),
         ScenarioParam("channel", "First channel", 1, "channel")), min_channels=2),
     Scenario("protocols", "UART, SPI and I²C", "UART on channel 1, SPI on 2–4, I²C on 5–6.", _protocols, (
         ScenarioParam("text", "UART text", "openSciLab\\n"),
-        ScenarioParam("baud", "Baud rate", 115200, "quantity"),
-        ScenarioParam("frequency", "SPI and I²C step rate", "1 MHz", "quantity", "Hz")), min_channels=6),
+        ScenarioParam("baud", "Baud rate", 115200, "quantity", scaled="baud"),
+        ScenarioParam("frequency", "SPI and I²C step rate", "1 MHz", "quantity", "Hz", scaled="rate")), min_channels=6),
     Scenario("counter", "Counter", "An 8 bit counter on the first channels, its clock on the next one.", _counter, (
-        ScenarioParam("frequency", "Count rate", "1 MHz", "quantity", "Hz"),)),
+        ScenarioParam("frequency", "Count rate", "1 MHz", "quantity", "Hz", scaled="rate"),)),
+    Scenario("circuit", "Circuit", "The nets of a circuit while it runs (Circuits), on the pins a logic "
+             "analyzer is wired to them with - e.g. the W65C02 breadboard computer at an Arduino Mega as Ben Eater "
+             "wires it: the address bus on D22-D52, the data bus on D31-D45, Φ2 on D2, R/W on D3. The device "
+             "takes the circuit's time.", _circuit, (
+                 ScenarioParam("path", "Circuit file", "", "path"),
+                 ScenarioParam("wiring", "Wiring", "Arduino Mega (Ben Eater)")), min_channels=32),
     Scenario("c64", "C64 bus", "A Commodore 64 at its expansion port running a small program (reset, a loop, "
              "two interrupts), on the channels of the profile “C64 expansion port”: control lines on "
              "channels 1–15, address and data bus on 25–48. Needs 48 channels: a multi device of two "
@@ -224,13 +292,22 @@ SCENARIOS: dict[str, Scenario] = {scenario.key: scenario for scenario in (
 )}
 
 
-def normalized(config: Optional[dict]) -> dict:
-    """``config`` with its scenario and the defaults of its parameters (``None``: the default)."""
+def max_rate(driver) -> float:
+    """The highest rate the simulated ``driver`` samples at (0: unknown)."""
+    try:
+        return float(getattr(driver, "max_frequency", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def normalized(config: Optional[dict], rate: float = 0.0) -> dict:
+    """``config`` with its scenario and the defaults of its parameters (``None``: the default), those
+    for a device sampling at most at ``rate`` (0: as written)."""
     config = dict(config or {})
     key = config.setdefault("scenario", "default")
     if key not in SCENARIOS:
         raise ScenarioError(f"unknown scenario {key!r} (known: {', '.join(SCENARIOS)})")
-    for name, value in SCENARIOS[key].defaults().items():
+    for name, value in SCENARIOS[key].defaults(rate).items():
         config.setdefault(name, value)
     channels = config.get("channels") or {}
     if not isinstance(channels, dict):
@@ -251,7 +328,7 @@ def apply(driver, config: Optional[dict]) -> dict:
     """Put the signals of ``config`` on the channels of the simulated ``driver`` (at once, also
     while it captures). Returns the configuration as applied; raises :class:`ScenarioError`
     and leaves the device unchanged when it does not fit."""
-    config = normalized(config)
+    config = normalized(config, max_rate(driver))
     scenario = SCENARIOS[config["scenario"]]
     nets = driver.channel_names()
     if len(nets) < scenario.min_channels:
@@ -281,6 +358,13 @@ def apply(driver, config: Optional[dict]) -> dict:
                 sources[net] = Constant(0.0)  # only what the scenario says is connected
     sources.update(built)
     sources.update(single)
+    # a circuit's nets: the device takes the circuit's time (a capture waits for the simulation, which runs
+    # slower than real time when it has much to do)
+    followed_run = next((getattr(source, "simulation", None) for source in built.values()
+                         if getattr(source, "simulation", None) is not None), None)
+    if followed_run is not None:
+        driver.clock = followed_run.clock
+        driver._drift_origin = driver.clock()
     # nets wired to another simulator stay wired (what drives them now is what they give back to)
     followed = getattr(driver, "followed", {})
     for net, (source, _previous) in list(followed.items()):
@@ -303,7 +387,14 @@ def apply(driver, config: Optional[dict]) -> dict:
             source.seed = driver.seed
         if isinstance(source, Replay):
             source.high = high
+    replaced = [source for source in circuit.sources.values() if getattr(source, "net", None) is not None
+                and getattr(source, "owned", False) and source not in sources.values()]
     circuit.sources = sources  # one assignment: a running capture never sees half a table
+    if replaced:  # (a circuit's nets no longer on the device: a run started for them stops)
+        from ...circuits.source import release_net_source
+
+        for source in replaced:
+            release_net_source(source)
     driver.signals = config
     driver.signal_names = dict(names)
     driver.log(f"signals: {describe(config)}")

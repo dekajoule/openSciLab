@@ -110,3 +110,76 @@ def test_undocumented_opcodes_are_marked(disasm):
     ]
     texts = [event.texts[0] for event in run(disasm, steps)]
     assert texts[:3] == ["RESET → $C000", "$C000  LAX $10  (undocumented)", "$C002  NOP"]
+
+
+#: A W65C02S program, cycle by cycle (Ben Eater's computer: RAM low, ROM from $8000).
+CMOS_PROGRAM = [
+    (0xFFFC, 0x00, R), (0xFFFD, 0x80, R),                                   # RESET vector -> $8000
+    (0x8000, 0x64, R), (0x8001, 0x10, R), (0x0010, 0x00, W),                # STZ $10
+    (0x8002, 0xDA, R), (0x8003, 0xB2, R), (0x01FF, 0x00, W),                # PHX
+    (0x8003, 0xB2, R), (0x8004, 0x20, R), (0x0020, 0x00, R),                # LDA ($20)
+    (0x0021, 0x60, R), (0x6000, 0x42, R),
+    (0x8005, 0x1E, R), (0x8006, 0x00, R), (0x8007, 0x02, R),                # ASL $0200,X (6 cycles)
+    (0x0200, 0x01, R), (0x0200, 0x01, R), (0x0200, 0x02, W),
+    (0x8008, 0x07, R), (0x8009, 0x10, R), (0x0010, 0x00, R),                # RMB0 $10
+    (0x0010, 0x00, R), (0x0010, 0x00, W),
+    (0x800A, 0x0F, R), (0x800B, 0x10, R), (0x0010, 0x00, R),                # BBR0 $10,$800F (taken)
+    (0x0010, 0x00, R), (0x800C, 0x02, R), (0x800D, 0xEA, R),
+    (0x800F, 0x80, R), (0x8010, 0xEF, R), (0x8011, 0x00, R),                # BRA $8000
+    (0x8000, 0x64, R), (0x8001, 0x10, R), (0x0010, 0x00, W),                # STZ $10
+    (0x8002, 0xDA, R), (0x8003, 0xB2, R), (0x01FE, 0x00, W),                # PHX
+    (0x8003, 0xB2, R), (0x8004, 0x20, R), (0x0020, 0x00, R),                # LDA ($20)
+    (0x0021, 0x60, R), (0x6000, 0x42, R),
+    (0x8005, 0x1E, R), (0x8006, 0x00, R), (0x8007, 0x02, R),                # ASL $0200,X
+    (0x0200, 0x02, R), (0x0200, 0x02, R), (0x0200, 0x04, W),
+    (0x8008, 0x07, R), (0x8009, 0x10, R),                                   # RMB0 $10
+]
+CMOS_TEXTS = [
+    "RESET → $8000", "$8000  STZ $10", "$8002  PHX", "$8003  LDA ($20)", "$8005  ASL $0200,X",
+    "$8008  RMB0 $10", "$800A  BBR0 $10,$800F", "$800F  BRA $8000", "$8000  STZ $10", "$8002  PHX",
+    "$8003  LDA ($20)", "$8005  ASL $0200,X",
+]
+#: The opcode fetches of CMOS_PROGRAM: what SYNC marks
+FETCHES = {2, 5, 8, 13, 19, 24, 30, 33, 36, 39, 44, 50}
+
+
+def run_cpu(disasm, steps, cpu, sync=False):
+    disassembler = disasm.Disassembler(cpu)
+    events = []
+    for number, (address, data, read) in enumerate(steps):
+        events += disassembler.feed(disasm.Cycle(ss=number * 10, es=number * 10 + 10, sample=number * 10 + 7,
+                                                 address=address, data=data, read=read,
+                                                 sync=(number in FETCHES) if sync else None))
+    return [event.texts[0] for event in events + disassembler.finish()]
+
+
+def test_the_w65c02s_has_opcodes_and_cycles_of_its_own(disasm):
+    assert len(disasm.CMOS_OPCODES) == 256
+    assert disasm.CMOS_OPCODES[0x80][:3] == ("BRA", "rel", "BRA")
+    assert disasm.CMOS_OPCODES[0xB2][:2] == ("LDA", "izp")
+    assert disasm.CMOS_OPCODES[0x8F][:3] == ("BBS0", "zpr", "BB")
+    assert disasm.CMOS_OPCODES[0xC3] == ("NOP", "imp", "NOP1", True)  # (1 byte, 1 cycle)
+    cmos = disasm.CPU_65C02
+    assert disasm.instruction_cycles(0x1E, cmos) == 6 and disasm.instruction_cycles(0x1E) == 7  # ASL abs,X
+    assert disasm.instruction_cycles(0xFE, cmos) == 7  # INC abs,X: 7 on both
+    assert disasm.instruction_cycles(0x6C, cmos) == 6 and disasm.instruction_cycles(0x6C) == 5  # JMP (abs)
+
+
+def test_a_w65c02s_program_is_followed(disasm):
+    assert run_cpu(disasm, CMOS_PROGRAM, disasm.CPU_65C02)[:len(CMOS_TEXTS)] == CMOS_TEXTS
+    # read as a 6510, STZ is a NOP and PHX takes too long: not the program
+    assert run_cpu(disasm, CMOS_PROGRAM, disasm.CPU_6510)[:len(CMOS_TEXTS)] != CMOS_TEXTS
+
+
+def test_sync_marks_the_opcode_fetches(disasm):
+    # in the middle of the program and without three instructions to check: SYNC is enough
+    texts = run_cpu(disasm, CMOS_PROGRAM, disasm.CPU_65C02, sync=True)
+    assert texts[:len(CMOS_TEXTS)] == CMOS_TEXTS
+    middle = CMOS_PROGRAM[30:]
+    shifted = {fetch - 30 for fetch in FETCHES if fetch >= 30}
+    disassembler = disasm.Disassembler(disasm.CPU_65C02)
+    events = []
+    for number, (address, data, read) in enumerate(middle):
+        events += disassembler.feed(disasm.Cycle(number, number + 1, number, address, data, read,
+                                                 sync=number in shifted))
+    assert [event.texts[0] for event in events + disassembler.finish()][:2] == ["$800F  BRA $8000", "$8000  STZ $10"]

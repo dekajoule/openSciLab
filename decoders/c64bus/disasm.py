@@ -1,7 +1,7 @@
 ##
 ## This file is part of the openSciLab project.
 ##
-## 6502/6510 disassembler for bus captures without a SYNC signal.
+## 6502/6510 and W65C02S disassembler for bus captures, with or without a SYNC signal.
 ##
 ## Copyright (C) 2026 Julian Decker
 ##
@@ -28,6 +28,11 @@ disassembler follows the program flow through the bus cycles instead:
 
 When a prediction fails, it synchronises again. Cycles stolen by the VIC must not
 be fed in.
+
+With the SYNC output of a 6502 or 65C02 (high at every opcode fetch) nothing has to
+be predicted: every instruction starts at a cycle with SYNC high. The W65C02S
+(the CMOS 6502 of Ben Eater's computer, for one) has opcodes of its own where the
+NMOS 6502 has its undocumented ones, and other cycle counts for some instructions.
 '''
 
 from dataclasses import dataclass
@@ -117,9 +122,46 @@ JAM JAM imp 02 imp 12 imp 22 imp 32 imp 42 imp 52 imp 62 imp 72 imp 92 imp B2 im
 '''
 
 
-def _table():
+# The W65C02S: its new instructions (kinds BRA: always taken, BB: bit test and branch, HALT: the
+# CPU waits for an interrupt or stops) and the bit instructions of every bit.
+CMOS = '''
+BRA BRA rel 80
+PHX PUSH imp DA
+PHY PUSH imp 5A
+PLX PULL imp FA
+PLY PULL imp 7A
+STZ W zp 64 zpx 74 abs 9C abx 9E
+TSB M zp 04 abs 0C
+TRB M zp 14 abs 1C
+INC M acc 1A
+DEC M acc 3A
+BIT R imm 89 zpx 34 abx 3C
+ORA R izp 12
+AND R izp 32
+EOR R izp 52
+ADC R izp 72
+STA W izp 92
+LDA R izp B2
+CMP R izp D2
+SBC R izp F2
+JMP JMP iax 7C
+WAI HALT imp CB
+STP HALT imp DB
+''' + ''.join('RMB%d M zp %02X\nSMB%d M zp %02X\nBBR%d BB zpr %02X\nBBS%d BB zpr %02X\n'
+              % (bit, 0x07 + 16 * bit, bit, 0x87 + 16 * bit, bit, 0x0F + 16 * bit, bit, 0x8F + 16 * bit)
+              for bit in range(8))
+
+# The reserved opcodes of the W65C02S are NOPs of their own lengths and cycles.
+CMOS_RESERVED = '''
+NOP R imm 02 imm 22 imm 42 imm 62 imm 82 imm C2 imm E2 zp 44 zpx 54 zpx D4 zpx F4 abs DC abs FC
+NOP NOP8 abs 5C
+NOP NOP1 ''' + ' '.join('imp %02X imp %02X' % (0x03 + 16 * row, 0x0B + 16 * row) for row in range(16)
+                         if 0x0B + 16 * row not in (0xCB, 0xDB)) + ' imp C3 imp D3'
+
+
+def _table(blocks):
     table = {}
-    for text, undocumented in ((DOCUMENTED, False), (UNDOCUMENTED, True)):
+    for text, undocumented in blocks:
         for line in text.strip().splitlines():
             words = line.split()
             mnemonic, kind = words[0], words[1]
@@ -129,15 +171,23 @@ def _table():
     return table
 
 
-#: opcode -> (mnemonic, addressing mode, kind, undocumented)
-OPCODES = _table()
+#: opcode -> (mnemonic, addressing mode, kind, undocumented) of the NMOS 6502/6510
+OPCODES = _table(((DOCUMENTED, False), (UNDOCUMENTED, True)))
+#: the same of the W65C02S
+CMOS_OPCODES = _table(((DOCUMENTED, False), (CMOS, False), (CMOS_RESERVED, True)))
 
-LENGTH = {'imp': 1, 'acc': 1, 'imm': 2, 'zp': 2, 'zpx': 2, 'zpy': 2, 'izx': 2, 'izy': 2,
-          'rel': 2, 'abs': 3, 'abx': 3, 'aby': 3, 'ind': 3}
-READ_CYCLES = {'imm': 2, 'zp': 3, 'zpx': 4, 'zpy': 4, 'abs': 4, 'abx': 4, 'aby': 4, 'izx': 6, 'izy': 5}
-WRITE_CYCLES = {'zp': 3, 'zpx': 4, 'zpy': 4, 'abs': 4, 'abx': 5, 'aby': 5, 'izx': 6, 'izy': 6}
+#: The CPUs: the 6510 of the C64 (an NMOS 6502), the CMOS W65C02S
+CPU_6510 = '6510 (C64)'
+CPU_65C02 = 'W65C02S'
+
+LENGTH = {'imp': 1, 'acc': 1, 'imm': 2, 'zp': 2, 'zpx': 2, 'zpy': 2, 'izx': 2, 'izy': 2, 'izp': 2,
+          'rel': 2, 'abs': 3, 'abx': 3, 'aby': 3, 'ind': 3, 'iax': 3, 'zpr': 3}
+READ_CYCLES = {'imm': 2, 'zp': 3, 'zpx': 4, 'zpy': 4, 'abs': 4, 'abx': 4, 'aby': 4, 'izx': 6, 'izy': 5,
+               'izp': 5}
+WRITE_CYCLES = {'zp': 3, 'zpx': 4, 'zpy': 4, 'abs': 4, 'abx': 5, 'aby': 5, 'izx': 6, 'izy': 6, 'izp': 5}
 MODIFY_CYCLES = {'acc': 2, 'zp': 5, 'zpx': 6, 'abs': 6, 'abx': 7, 'aby': 7, 'izx': 8, 'izy': 8}
-FIXED_CYCLES = {'BRK': 7, 'RTI': 6, 'RTS': 6, 'JSR': 6, 'PUSH': 3, 'PULL': 4, 'branch': 2, 'imp': 2}
+FIXED_CYCLES = {'BRK': 7, 'RTI': 6, 'RTS': 6, 'JSR': 6, 'PUSH': 3, 'PULL': 4, 'branch': 2, 'imp': 2,
+                'BRA': 3, 'BB': 5, 'HALT': 3, 'NOP1': 1, 'NOP8': 8}
 
 VECTORS = {0xFFFA: 'NMI', 0xFFFC: 'RESET', 0xFFFE: 'IRQ'}
 
@@ -153,15 +203,21 @@ LOOKAHEAD = 64
 _NEED_MORE = object()
 
 
-def instruction_cycles(opcode):
-    mnemonic, mode, kind, _undocumented = OPCODES[opcode]
+def instruction_cycles(opcode, cpu=CPU_6510):
+    '''The cycles of an instruction without page crossing and taken branch.'''
+    cmos = cpu == CPU_65C02
+    mnemonic, mode, kind, _undocumented = (CMOS_OPCODES if cmos else OPCODES)[opcode]
     if kind == 'JMP':
-        return 3 if mode == 'abs' else 5
+        # JMP (abs): 5 cycles on the NMOS 6502, 6 on the 65C02 (without the page bug)
+        return 3 if mode == 'abs' else 6 if cmos else 5
     if kind == 'R':
         return READ_CYCLES.get(mode, 2)
     if kind == 'W':
         return WRITE_CYCLES.get(mode, 4)
     if kind == 'M':
+        # ASL/LSR/ROL/ROR abs,X take 6 cycles on the 65C02 without page crossing; INC/DEC 7
+        if cmos and mode == 'abx' and mnemonic not in ('INC', 'DEC'):
+            return 6
         return MODIFY_CYCLES.get(mode, 6)
     return FIXED_CYCLES.get(kind, 2)
 
@@ -171,7 +227,10 @@ def operand_text(mode, value, target):
         'imp': '', 'acc': 'A', 'imm': '#$%02X', 'zp': '$%02X', 'zpx': '$%02X,X',
         'zpy': '$%02X,Y', 'izx': '($%02X,X)', 'izy': '($%02X),Y', 'abs': '$%04X',
         'abx': '$%04X,X', 'aby': '$%04X,Y', 'ind': '($%04X)', 'rel': '$%04X',
+        'izp': '($%02X)', 'iax': '($%04X,X)',
     }
+    if mode == 'zpr':  # BBR/BBS: the zero page address and the branch target
+        return '$%02X,$%04X' % (value, target)
     text = formats[mode]
     if '%' not in text:
         return text
@@ -187,6 +246,8 @@ class Cycle:
     address: int
     data: int
     read: bool
+    #: Level of SYNC (high at an opcode fetch); None without the signal
+    sync: object = None
 
 
 @dataclass
@@ -200,7 +261,11 @@ class Event:
 
 
 class Disassembler:
-    def __init__(self):
+    def __init__(self, cpu=CPU_6510):
+        self.cpu = cpu
+        self.opcodes = CMOS_OPCODES if cpu == CPU_65C02 else OPCODES
+        # JMP (abs) reads its target after the operand (the 65C02 one cycle later), JMP (abs,X) too
+        self.pointer_cycles = (4, 5) if cpu == CPU_65C02 else (3, 4)
         self.cycles = []
         self.position = 0
         self.synced = False
@@ -265,6 +330,9 @@ class Disassembler:
                     event = self._event('interrupt', index, fetch, ['%s → $%04X' % (name, vector), name])
                     return [event], fetch
 
+        if cycle.sync is not None:  # SYNC marks the opcode fetches: no chain to check
+            return ([], index) if cycle.sync else None
+
         position = index
         for _step in range(SYNC_CHAIN):
             outcome = self._decode(position, final, validate=False)
@@ -313,12 +381,12 @@ class Disassembler:
         if index >= count:
             return None if final else _NEED_MORE
         fetch = cycles[index]
-        if not fetch.read:
+        if not fetch.read or fetch.sync is False:
             return None
-        mnemonic, mode, kind, undocumented = OPCODES[fetch.data]
+        mnemonic, mode, kind, undocumented = self.opcodes[fetch.data]
         if kind == 'JAM':
             return None
-        base = instruction_cycles(fetch.data)
+        base = instruction_cycles(fetch.data, self.cpu)
         if not final and count < index + base + EXTRA_CYCLES + INTERRUPT_CYCLES + 1:
             return _NEED_MORE
 
@@ -327,24 +395,33 @@ class Disassembler:
 
         pc = fetch.address
         length = LENGTH[mode]
-        # JSR reads the high byte of its target only after pushing the return address.
+        # JSR reads the high byte of its target only after pushing the return address, BBR/BBS the
+        # branch offset after reading the zero page byte.
         operand_cycles = [index + 1, index + 5] if kind == 'JSR' else list(range(index + 1, index + length))
+        if mode == 'zpr':
+            operand_cycles[1] = next((position for position in range(index + 2, index + 5)
+                                      if at(position) is not None and at(position).read
+                                      and at(position).address == (pc + 2) & 0xFFFF), index + 2)
         operand = []
         for offset, position in enumerate(operand_cycles, start=1):
             cycle = at(position)
             if cycle is None or not cycle.read or cycle.address != (pc + offset) & 0xFFFF:
                 return None
             operand.append(cycle.data)
-        value = operand[0] | (operand[1] << 8) if length == 3 else (operand[0] if operand else 0)
+        if mode == 'zpr':  # the zero page address, then the branch offset
+            value, offset = operand
+        else:
+            value = operand[0] | (operand[1] << 8) if length == 3 else (operand[0] if operand else 0)
+            offset = value
         sequential = (pc + length) & 0xFFFF
 
-        if kind == 'branch':
-            target = (sequential + (value - 256 if value & 0x80 else value)) & 0xFFFF
-            targets = [target] if target == sequential else [target, sequential]
+        if kind in ('branch', 'BRA', 'BB'):
+            target = (sequential + (offset - 256 if offset & 0x80 else offset)) & 0xFFFF
+            targets = [target] if target == sequential or kind == 'BRA' else [target, sequential]
         elif kind in ('JSR', 'JMP') and mode == 'abs':
             targets = [value]
         elif kind in ('JMP', 'RTS', 'RTI', 'BRK'):
-            low_index, high_index = {'JMP': (3, 4), 'RTS': (3, 4), 'RTI': (4, 5), 'BRK': (5, 6)}[kind]
+            low_index, high_index = {'JMP': self.pointer_cycles, 'RTS': (3, 4), 'RTI': (4, 5), 'BRK': (5, 6)}[kind]
             low, high = at(index + low_index), at(index + high_index)
             if low is None or high is None or not (low.read and high.read):
                 return None
@@ -358,8 +435,26 @@ class Disassembler:
         full = '$%04X  %s' % (pc, statement) + ('  (undocumented)' if undocumented else '')
         texts = [full, statement, mnemonic]
 
+        if kind == 'HALT':
+            # WAI/STP: the CPU waits for an interrupt (or a reset); the next instruction is found anew
+            end = min(index + base, count - 1)
+            return [self._event('instruction', index, end, texts)], end
+
         candidates = []
-        for target in targets:
+        if fetch.sync is not None:
+            # the next opcode fetch is the next cycle with SYNC high; an interrupt in between
+            following = next((position for position in range(index + 1, count) if cycles[position].sync), None)
+            if following is None:
+                return None if final else _NEED_MORE
+            for position in range(index + base, following + 1):
+                interrupt = self._interrupt(position, cycles[position].address) \
+                    if cycles[position].address in targets else None
+                if interrupt is not None:
+                    candidates.append((position, interrupt))
+                    break
+            else:
+                candidates.append((following, None))
+        for target in targets if fetch.sync is None else ():
             for position in range(index + base, index + base + EXTRA_CYCLES + 1):
                 cycle = at(position)
                 if cycle is None:

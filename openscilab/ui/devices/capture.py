@@ -251,9 +251,9 @@ class CaptureController(QObject):
         if self.is_capturing:
             return False
         session = self.last_session
-        if session is None and self.view is not None and self.view.model.session is not None \
+        if session is None and self.view is not None and self.view.captured_session is not None \
                 and self.view.source is self:
-            session = self.view.model.session
+            session = self.view.captured_session
         if session is None:
             messages.warning(self.view, "Capture again", "There is no capture to repeat.",
                              f"Start a capture with {self.name} first.")
@@ -422,8 +422,8 @@ class CaptureController(QObject):
         if self.is_capturing:
             return False
         view = self.ensure_view()
-        if session is None and view is not None and view.model.session is not None:
-            session = view.model.session.clone_settings()
+        if session is None and view is not None and view.captured_session is not None:
+            session = view.captured_session.clone_settings()
         if session is None and self.last_session is not None:
             session = self.last_session.clone_settings()
         if session is None and self.quick_settings is not None:
@@ -660,8 +660,9 @@ class CaptureController(QObject):
     def current_settings(self) -> Optional[CaptureSession]:
         """Settings of the capture the view shows, or the last ones used for the device."""
         view = self.view
-        if view is not None and view.model.session is not None and view.model.session.capture_channels:
-            return view.model.session.clone_settings()
+        session = view.captured_session if view is not None else None
+        if session is not None and session.capture_channels:
+            return session.clone_settings()
         return self.stored_settings()
 
     def _decoders(self) -> list:

@@ -768,6 +768,9 @@ def open_shell(mode: str = "bridge"):
         raise
     driver.shell = shell
     driver.web_control_url = lambda: None  # (no web server: its screen comes over SCPI)
+    from .stored import share_simulation
+
+    share_simulation(driver, shell.instrument, f"rigol-sim:{mode}")
     original = driver.dispose
 
     def dispose() -> None:

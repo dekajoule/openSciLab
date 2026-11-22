@@ -65,6 +65,11 @@ def no_unanswered_message_boxes(monkeypatch):
 
     monkeypatch.setattr(board_warning_dialog, "_exec", unexpected_warning)
 
+    from openscilab.ui.dialogs.capture_dialog import CaptureDialog
+
+    # the data view of a device opens its capture setup: cancelled (tests that answer it patch exec)
+    monkeypatch.setattr(CaptureDialog, "exec", lambda dialog: 0)
+
 
 @pytest.fixture(autouse=True)
 def empty_clipboard():

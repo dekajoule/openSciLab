@@ -162,7 +162,7 @@ def test_a_short_channel_limits_only_its_own_shift(make_dataview, monkeypatch):
         def exec(self):
             return True
 
-    monkeypatch.setattr("openscilab.ui.documents.dataview.ShiftChannelsDialog", Dialog)
+    monkeypatch.setattr("openscilab.ui.documents.dataview_samples.ShiftChannelsDialog", Dialog)
     view.shift_channels()
     assert np.array_equal(channels[1].samples, expected)  # shifted by 20, not by the 5 of channel 1
     assert channels[0].samples.size == 5 and not channels[0].samples.any()

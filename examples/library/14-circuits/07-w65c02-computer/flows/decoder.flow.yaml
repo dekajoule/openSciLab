@@ -1,0 +1,19 @@
+flow: Address $6000 selects the VIA
+description: "A15 = 0, A14 = 1: /VIA_CS is low the whole time, the ROM's /CE (/A15) high, and /RAM_CS low only while PHI2 is high (half the time)."
+nodes:
+  decoder: {type: device.device, address: "circuit:circuits/decoder.circuit.yaml", at: [0, 0]}
+  capture: {type: device.capture, channels: [ROM_CE, RAM_CS, VIA_CS], rate: 100 kHz, duration: 10 ms, at: [288, 0]}
+  rom: {type: measure.duty, at: [576, 0]}
+  ram: {type: measure.duty, at: [576, 224]}
+  via: {type: measure.duty, at: [576, 448]}
+  rom_check: {type: report.check, expected: 1, tolerance: 0, title: ROM not selected, at: [864, 0]}
+  ram_check: {type: report.check, expected: 0.5, tolerance: 0.05, title: RAM follows PHI2, at: [864, 224]}
+  via_check: {type: report.check, expected: 0, tolerance: 0, title: VIA selected, at: [864, 448]}
+edges:
+  - decoder.device -> capture.device
+  - capture.ROM_CE -> rom.in
+  - capture.RAM_CS -> ram.in
+  - capture.VIA_CS -> via.in
+  - rom.out -> rom_check.in
+  - ram.out -> ram_check.in
+  - via.out -> via_check.in

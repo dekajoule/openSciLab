@@ -33,8 +33,8 @@ class StateDialog(QDialog):
                 "Every edge of the clock channel becomes one state holding the levels of the "
                 "channels: the device under test clocks the samples. The states "
                 "replace the loaded capture; Analyze > Back to the timing capture returns to it. "
-                "Decoders that follow the clock themselves (such as the C64 bus) need the timing "
-                "capture.",
+                "Decoders that follow the clock themselves (such as the C64 bus) get one edge of it "
+                "per state.",
                 self,
             )
         )

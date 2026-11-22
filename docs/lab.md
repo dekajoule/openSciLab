@@ -52,7 +52,7 @@ How the parts look and what they are called follows one set of rules: [design.md
   it starts with the start page. An unsaved flow writes its files into a scratch folder (shown
   under *Data*). An example opens as a copy in a temporary project; the first *Save* (or *File →
   Save project as…*) asks where to keep it, closing its last document asks whether to keep it.
-* **Settings** (*File → Settings…*, Cmd+, on macOS): theme (dark, light, like the system), text
+* **Settings** (*File → Settings…*, Cmd+, on macOS): theme (light by default, dark, like the system), text
   size, startup, mouse wheel, data folder, devices.
 
 ## Devices

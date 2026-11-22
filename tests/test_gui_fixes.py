@@ -20,17 +20,22 @@ def settle() -> None:
 
 
 def test_the_header_holds_tools_instead_of_device_names(shell):
-    # one New button whose menu is File → New, in the same order
-    assert shell.new_tool.menu() is shell.new_menu
+    # a New button for each entry of File → New, in the same order
     assert [action.text().replace("&", "") for action in shell.new_menu.actions() if action.text()] == [
         "Flow", "Panel", "Data view", "Waveform", "Circuit", "Project from an example..."]  # (Circuit: a plugin's)
+    assert [button.text() for button in shell.new_tools.values()] == [
+        "Flow", "Panel", "Data view", "Waveform", "Circuit", "Project..."]
+    assert all(button.menu() is None for button in shell.new_tools.values())
     assert shell.examples_tool.menu() is shell.examples_menu
     keys = [item.key for item in shell.header.ordered()]
     # the search right after the logo, then new, open and save, the examples, the run controls
-    assert keys.index("logo") < keys.index("search") < keys.index("new") < keys.index("open") \
-        < keys.index("examples") < keys.index("run") < keys.index("time")
-    shell.new_tool.click()  # (its button: a flow; its arrow: the menu)
+    assert keys.index("logo") < keys.index("search") < keys.index("new") < keys.index("new-flow") \
+        < keys.index("new-project") < keys.index("open") < keys.index("examples") < keys.index("run") \
+        < keys.index("time")
+    shell.new_tools["Flow"].click()
     assert type(shell.active_document()).__name__ == "FlowDocument"
+    shell.new_tools["Data view"].click()
+    assert type(shell.active_document()).__name__ == "DataView"
     assert not hasattr(shell, "device_chips")
     assert shell.save_tool.toolTip().startswith("Save")
 
@@ -103,8 +108,10 @@ def test_the_logic_analyzer_template_captures_with_a_connected_device(shell, mon
     assert shell.run_button.text() == "Capture" and shell.run_button.isEnabled()
 
 
-def test_the_device_card_has_no_capture_tab_and_its_functions_are_in_details(shell):
+def test_the_device_card_has_no_capture_tab_and_its_functions_are_in_details(shell, monkeypatch, idle_loop):
     from PySide6.QtWidgets import QToolButton
+
+    from openscilab.ui.dialogs.capture_dialog import CaptureDialog
 
     from openscilab.driver.simulated import open_simulated
 
@@ -117,8 +124,17 @@ def test_the_device_card_has_no_capture_tab_and_its_functions_are_in_details(she
     buttons = card.device_box.findChildren(QToolButton)
     assert [button.defaultAction() for button in buttons] == card.device_actions
     assert card.data_button.text() == "Data view"
+    shown = []
+    monkeypatch.setattr(CaptureDialog, "exec", lambda dialog: shown.append(dialog) or 0)
     card.data_button.click()
     assert shell.active_document() is card.controller.view
+    idle_loop()
+    assert len(shown) == 1  # nothing captured yet: the capture setup opens at once
+    view = card.controller.view
+    assert view.empty_primary_button.text() == "Capture setup..."
+    card.data_button.click()
+    idle_loop()
+    assert len(shown) == 2
 
 
 def test_one_typeface_everywhere_and_the_mark_alone(shell):

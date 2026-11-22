@@ -121,7 +121,16 @@ LOCK:
 ;--------------------------------------------------------------------------------------------
 .program POSITIVE_CAPTURE
 ;Rising edge: the trigger pin has to be low before it counts as high (a pin that is high at the
-;start does not trigger at once), also between the bursts
+;start does not trigger at once), also between the bursts. The pre-trigger samples are recorded
+;first: an edge right after the start would otherwise leave the oldest of them unrecorded (zero).
+
+    pull
+    mov x, osr                  ;read pre-trigger length - 1
+
+PRE_FILL:
+
+    in pins 32                  ;read sample
+    jmp x-- PRE_FILL            ;until the pre-trigger samples are there
 
     pull
     out y 32    		        ;read loop count
@@ -168,7 +177,16 @@ INNER_LOOP:
 
 ;--------------------------------------------------------------------------------------------
 .program NEGATIVE_CAPTURE
-;Falling edge: the trigger pin has to be high before it counts as low, also between the bursts
+;Falling edge: the trigger pin has to be high before it counts as low, also between the bursts.
+;The pre-trigger samples are recorded first (see POSITIVE_CAPTURE).
+
+    pull
+    mov x, osr                  ;read pre-trigger length - 1
+
+PRE_FILL:
+
+    in pins 32                  ;read sample
+    jmp x-- PRE_FILL            ;until the pre-trigger samples are there
 
     pull
     out y 32    		        ;read loop count
@@ -317,7 +335,18 @@ INNER_LOOP:
 
 ;--------------------------------------------------------------------------------------------
 .program COMPLEX_CAPTURE
+;The pre-trigger samples are recorded first; IRQ 6 then lets the trigger program look at its pins
+;(an earlier trigger would leave the oldest of them unrecorded, zero).
 
+    pull
+    out x 32    		        ;read pre-trigger length - 1
+
+PRE_FILL:
+
+    in pins 32                  ;read sample
+    jmp x-- PRE_FILL            ;until the pre-trigger samples are there
+
+    irq nowait 6                ;pre-trigger samples recorded: the trigger program may start
     pull
     out x 32    		        ;read capture length
 

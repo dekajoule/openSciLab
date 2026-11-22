@@ -86,6 +86,8 @@ class Circuit:
     elements: dict[str, list[str]] = field(default_factory=dict)
     #: the supply of the digital parts (V)
     vcc: float = 5.0
+    #: nets only chips of a 6502 computer connect: the co-simulation carries them (``_chip_nets``)
+    digital_nets: set = field(default_factory=set)
     #: the microcontrollers to run with it (``circuits/mcu/boards.py``)
     mcus: list = field(default_factory=list)
     #: start as switched on (every capacitor empty, no operating point first: ngspice's ``uic``)
@@ -208,6 +210,7 @@ def emit(schematic: Schematic, resolve: Callable[[str], ComponentSpec | None], m
     wanted_models: list[tuple[str, str]] = []  # (model, component)
     saves: list[str] = []
     specs = {ref: resolve(component.type) for ref, component in schematic.components.items()}
+    result.digital_nets = _chip_nets(netlist, specs) if analysis is None else set()
     bridges = False
     supplies: dict[str, tuple[str, str]] = {}
     for ref in sorted(schematic.components, key=_natural):
@@ -339,8 +342,9 @@ def emit(schematic: Schematic, resolve: Callable[[str], ComponentSpec | None], m
     if bridges:
         vcc = result.vcc
         definitions.append(f".model osl_adc adc_bridge(in_low={0.3 * vcc:g} in_high={0.7 * vcc:g})")
+        edge = values.parse_optional(schematic.setting("logic_edge")) or 1e-9
         definitions.append(f".model osl_dac dac_bridge(out_low=0 out_high={vcc:g} out_undef={vcc / 2:g} "
-                           "t_rise=1n t_fall=1n)")
+                           f"t_rise={edge:g} t_fall={edge:g})")
     # models
     if models is not None and wanted_models:
         names = list(dict.fromkeys(name for name, _ref in wanted_models))
@@ -376,6 +380,31 @@ def emit(schematic: Schematic, resolve: Callable[[str], ComponentSpec | None], m
     return result
 
 
+def _chip_nets(netlist: Netlist, specs: dict) -> set[str]:
+    """The nets that only connect chips of a 6502 computer (``mcu/bus_chips.py``) - and logic probes: the
+    co-simulation carries them itself, as levels (a bus of them in ngspice would cost a solver step per
+    edge of every line); their probes take their levels from it."""
+    from .mcu.boards import emulator_of
+
+    found = set()
+    for name, pins in netlist.nets.items():
+        if name == "0" or len(pins) < 2:
+            continue
+        chips = 0
+        for pin in pins:
+            spec = specs.get(pin.component)
+            if spec is None:
+                break
+            if spec.role == "mcu" and emulator_of(spec.board) == "chip":
+                chips += 1
+            elif spec.role != "probe.logic":
+                break
+        else:
+            if chips >= 1:
+                found.add(name)
+    return found
+
+
 def _microcontroller(result: Circuit, netlist: Netlist, ref: str, component: Component, spec: ComponentSpec,
                      params: dict[str, str], net_name, lines: list[str], definitions: list[str], base_folder: str,
                      analysis: str | None) -> None:
@@ -400,7 +429,8 @@ def _microcontroller(result: Circuit, netlist: Netlist, ref: str, component: Com
     if firmware and not os.path.isfile(firmware):
         result.problems.append(Problem("error", f"the firmware {os.path.basename(firmware)} is not there", ref))
         firmware = ""
-    element_lines, info = netlist_lines(ref, board, pin_nets, result.vcc, firmware)
+    digital = {net_name(net) for net in getattr(result, "digital_nets", set())}
+    element_lines, info = netlist_lines(ref, board, pin_nets, result.vcc, firmware, digital)
     if analysis is not None:
         # an analysis has no microcontroller running: its pins are inputs (high impedance)
         element_lines = [line.replace(" external", "") for line in element_lines]

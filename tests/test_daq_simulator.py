@@ -111,7 +111,7 @@ def test_smaller_text_makes_the_controls_tighter():
     large, small = theme.build_stylesheet(12), theme.build_stylesheet(10)
     assert "padding: 4px 10px;" in large and "padding: 3px 8px;" in small  # (the menu bar)
     assert "font-size: 10px;" in small and "icon-size: 14px;" in small and "icon-size: 16px;" in large
-    assert "border-bottom: 2px solid" in small  # (lines stay as they are)
+    assert "border-bottom: 1px solid" in small  # (lines stay as they are)
     assert theme.icon_px(16, 10) == 14 and theme.icon_px(16, 12) == 16 and theme.scaled(1, 10) == 1
     assert theme.build_stylesheet(14) == theme._stylesheet(14)  # (larger text: the spacing as drawn)
     from openscilab.ui.view_model import DEFAULT_CHANNEL_HEIGHT

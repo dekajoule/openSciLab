@@ -5,6 +5,7 @@ folder the tools are found in or installed into."""
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 
@@ -286,7 +287,9 @@ def test_reset_and_serial_input_reach_the_firmware_between_steps():
         simulation.mcu("U1", "serial", b"abc")
         _run_for(simulation, 0.1)
         serial = b"".join(events.get("U1", {}).get("serial", b"") for events in simulation.take_mcu_events())
-        assert b"ABC" in serial  # (echoed, in capitals: what the test firmware does)
+        # (echoed, in capitals: what the test firmware does - its line "A0=..." of every 20 ms may come
+        # between two of the letters on a slow computer)
+        assert b"ABC" in re.sub(rb"A0=\d+\n", b"", serial), serial
     finally:
         simulation.stop()
 
