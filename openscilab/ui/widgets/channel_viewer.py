@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 from .. import colors
 from ...driver.models import AnalyzerChannel
 from ..icons import icon
-from ..theme import DISPLAY, set_variant
+from ..theme import DISPLAY, set_role, set_variant
 
 # the waveform display is dark in both themes
 ACCENT_HOVER = DISPLAY["ACCENT_HOVER"]
@@ -274,7 +274,7 @@ class ChannelViewer(QWidget):
         self.setAcceptDrops(True)
         self.drop_line = QFrame(self)
         self.drop_line.setFixedHeight(DROP_LINE_HEIGHT)
-        self.drop_line.setStyleSheet(f"background-color: {ACCENT_HOVER}; border: none;")
+        set_role(self.drop_line, "drop-line")
         self.drop_line.hide()
 
         model.capture_changed.connect(self.rebuild)

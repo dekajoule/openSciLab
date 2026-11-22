@@ -480,3 +480,39 @@ def test_a_run_before_its_first_point_is_not_stuck(monkeypatch):
     child._progress_at = (clock, since - process.STALL_SECONDS - 1)  # (and then nothing for that long)
     child._watch_progress(child.simulation, False)
     assert child.simulation.state == "error" and "does not get on" in child.simulation.error
+
+
+def test_an_engine_process_that_ran_microcontrollers_is_not_kept_for_the_next_run(monkeypatch):
+    """Its ngspice keeps the step callback of the co-simulation for good: a circuit without
+    microcontrollers run on it took other steps (the 555 of the W65C02 example stood still after the
+    Arduino example had run)."""
+    import itertools
+    import threading
+
+    from openscilab.circuits.engines import process
+
+    class Alive:
+        def is_alive(self) -> bool:
+            return True
+
+    class Pipe:
+        def send(self, message) -> None:
+            pass
+
+    def engine() -> process.EngineProcess:
+        made = process.EngineProcess.__new__(process.EngineProcess)  # (no process of its own)
+        made.process, made.connection, made.ended = Alive(), Pipe(), threading.Event()
+        made._numbers, made._pending, made._lock, made._send_lock = itertools.count(1), {}, threading.Lock(), threading.Lock()
+        made.generation, made.stepped, made.on_batch, made.on_ended = 0, False, None, None
+        made.closed = False
+        made.close = lambda: setattr(made, "closed", True)
+        return made
+
+    monkeypatch.setattr(process, "_pool", [])
+    plain, with_mcus = engine(), engine()
+    plain.call_async("live", circuit=None, mcus=[])
+    with_mcus.call_async("live", circuit=None, mcus=["U1"])
+    assert not plain.stepped and with_mcus.stepped
+    process.release(plain)
+    process.release(with_mcus)
+    assert process._pool == [plain] and with_mcus.closed and not plain.closed

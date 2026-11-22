@@ -436,6 +436,8 @@ QFrame[role^="banner"] {{
     border-radius: {R['card']}px;
     border: 1px solid {BORDER};
 }}
+/* where a dragged channel goes: the display stays dark in both themes */
+QFrame[role="drop-line"] {{ background-color: {DISPLAY['ACCENT_HOVER']}; border: none; }}
 QFrame[role="banner-info"] {{ background-color: {C['BANNER_INFO']}; border-color: {C['BANNER_INFO_BORDER']}; }}
 QFrame[role="banner-warning"] {{ background-color: {C['BANNER_WARNING']}; border-color: {C['BANNER_WARNING_BORDER']}; }}
 QFrame[role="banner-error"] {{ background-color: {C['BANNER_ERROR']}; border-color: {C['BANNER_ERROR_BORDER']}; }}
